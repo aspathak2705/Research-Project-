@@ -30,11 +30,11 @@ def build_controller(settings: Settings) -> DeviceController:
     ensure_directory(settings.upload_queue_root)
 
     bus = I2CBus(mock_mode=settings.mock_mode)
-    bus.connect()
+    shared_bus = bus.connect()
 
     sensor_manager = SensorManager(
-        max30102=MAX30102Sensor(mock_mode=settings.mock_mode),
-        as7341=AS7341Sensor(mock_mode=settings.mock_mode),
+        max30102=MAX30102Sensor(shared_bus=shared_bus, mock_mode=settings.mock_mode),
+        as7341=AS7341Sensor(shared_bus=shared_bus, mock_mode=settings.mock_mode),
     )
     quality_checker = SignalQualityChecker()
     patient_manager = PatientDataManager(settings.raw_data_root / "Patient_Data")
@@ -72,4 +72,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

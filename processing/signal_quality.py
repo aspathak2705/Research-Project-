@@ -12,6 +12,7 @@ from config.constants import (
 from hardware.sensor_manager import UnifiedSample
 
 
+
 @dataclass(frozen=True)
 class QualityResult:
     passed: bool
@@ -46,9 +47,16 @@ class SignalQualityChecker:
         ):
             reasons.append("AS7341 channel saturation threshold exceeded")
 
-        if self._motion_score(red_values, ir_values) > MAX30102_MOTION_LIMIT:
-            reasons.append("excessive motion detected")
+        # -------------------------------
+        # Motion detection disabled
+        # Milestone 0: Data acquisition
+        # -------------------------------
 
+        # if self._motion_score(red_values, ir_values) > MAX30102_MOTION_LIMIT:
+        #     reasons.append("excessive motion detected")
+
+        print(f"Quality check received {len(samples)} samples")
+        print(reasons)
         return QualityResult(passed=not reasons, reasons=reasons)
 
     @staticmethod
@@ -59,4 +67,3 @@ class SignalQualityChecker:
         red_delta = sum(abs(curr - prev) for prev, curr in zip(red_values, red_values[1:]))
         ir_delta = sum(abs(curr - prev) for prev, curr in zip(ir_values, ir_values[1:]))
         return (red_delta + ir_delta) // max(len(red_values) - 1, 1)
-

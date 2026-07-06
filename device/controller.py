@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 from cloud.google_drive import GoogleDriveSync
 from device.state_machine import DeviceState
-from hardware.sensor_manager import SensorManager, UnifiedSample
+from hardware.sensor_manager import SensorManager
 from processing.signal_quality import QualityResult, SignalQualityChecker
 from storage.csv_storage import CSVStorage
 from storage.patient_manager import PatientDataManager
@@ -52,7 +53,12 @@ class DeviceController:
         self._require(self.sensor_manager.wait_for_finger(), "finger not detected")
 
         self._transition(DeviceState.ACQUIRE)
-        samples = self.sensor_manager.acquire_samples(sample_count=sample_count)
+        samples = []
+        for _ in range(sample_count):
+            samples.append(self.sensor_manager.collect(normalized_name))
+            time.sleep(0.05)
+        print(f"Collected samples: {len(samples)}")
+        print(samples[:3])
 
         self._transition(DeviceState.QUALITY_CHECK)
         quality = self.quality_checker.validate(samples)
@@ -86,4 +92,3 @@ class DeviceController:
     def _require(condition: bool, message: str) -> None:
         if not condition:
             raise RuntimeError(message)
-

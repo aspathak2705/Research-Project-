@@ -5,10 +5,18 @@ from processing.signal_quality import SignalQualityChecker
 def _sample(timestamp: float, red: int, ir: int) -> UnifiedSample:
     return UnifiedSample(
         timestamp=timestamp,
-        max_red=red,
-        max_ir=ir,
+        patient="Test",
+        AS7341_415nm=10000,
+        AS7341_445nm=10100,
+        AS7341_480nm=10200,
+        AS7341_515nm=10300,
+        AS7341_555nm=10400,
+        AS7341_590nm=10500,
+        AS7341_630nm=10600,
+        AS7341_680nm=10700,
+        MAX30102_RED=red,
+        MAX30102_IR=ir,
         finger_detected=True,
-        as7341_channels={"f1_415nm": 10000, "nir": 12000},
         as7341_saturated=False,
     )
 
