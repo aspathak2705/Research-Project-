@@ -42,7 +42,7 @@ class Settings:
             upload_queue_root=upload_queue_root,
             google_drive_root=os.getenv("HEMO_GOOGLE_DRIVE_ROOT", DEFAULT_GOOGLE_DRIVE_ROOT),
             sample_count=int(os.getenv("HEMO_SAMPLE_COUNT", str(DEFAULT_SAMPLE_COUNT))),
-            mock_mode=_env_flag("HEMO_MOCK_MODE", True),
+            mock_mode=_env_flag("HEMO_MOCK_MODE", False),
             log_level=os.getenv("HEMO_LOG_LEVEL", "INFO").upper(),
         )
 
