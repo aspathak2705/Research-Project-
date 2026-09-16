@@ -5,6 +5,10 @@ from pathlib import Path
 from utils.helpers import ensure_directory, sanitize_patient_name
 
 
+import datetime
+import uuid
+
+
 class PatientDataManager:
     def __init__(self, patient_root: Path) -> None:
         self.patient_root = ensure_directory(patient_root)
@@ -14,7 +18,10 @@ class PatientDataManager:
 
     def next_session_path(self, patient_name: str) -> Path:
         patient_dir = self.get_patient_directory(patient_name)
-        existing = sorted(patient_dir.glob("session_*.csv"))
-        session_number = len(existing) + 1
-        return patient_dir / f"session_{session_number:03d}.csv"
+        timestamp_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S")
+        unique_suffix = uuid.uuid4().hex[:4].upper()
+        patient_slug = sanitize_patient_name(patient_name).upper()
+        session_id = f"{patient_slug}_{timestamp_str}_{unique_suffix}"
+        return patient_dir / f"{session_id}.csv"
+
 

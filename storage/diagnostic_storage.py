@@ -65,27 +65,45 @@ class DiagnosticStorage:
                     writer.writerow(row)
 
         diag_file = patient_diag_dir / f"{session_id}_diagnostics.json"
-        payload = {
+        summary_payload = {
             "session_id": session_id,
             "patient_name": patient_name,
+            "status": result.status.value,
             "session_passed": result.passed,
             "attempted_samples": result.attempted_samples,
             "valid_samples": result.valid_samples,
             "rejected_samples": result.rejected_samples,
             "rejection_ratio": result.rejection_ratio,
+            "as7341_valid_samples": result.as7341_valid_samples,
+            "as7341_rejected_samples": result.as7341_rejected_samples,
+            "max30102_valid_samples": result.max30102_valid_samples,
+            "max30102_rejected_samples": result.max30102_rejected_samples,
             "session_reasons": result.reasons,
-            "sample_diagnostics": [
-                {
-                    "timestamp": item.sample.timestamp,
-                    "valid": item.valid,
-                    "reasons": item.reasons,
-                    "warnings": item.warnings,
-                }
-                for item in result.evaluated_samples
-            ],
+            "rejection_histogram": result.rejection_histogram,
         }
 
         with diag_file.open("w", encoding="utf-8") as json_file:
-            json.dump(payload, json_file, indent=2)
+            json.dump(summary_payload, json_file, indent=2)
+
+        # Write event stream to jsonl
+        events_file = patient_diag_dir / f"{session_id}_events.jsonl"
+        with events_file.open("w", encoding="utf-8") as jsonl_file:
+            for idx, item in enumerate(result.evaluated_samples, start=1):
+                s = item.sample
+                rec = {
+                    "session_id": session_id,
+                    "sample_index": idx,
+                    "timestamp": s.timestamp,
+                    "status": "VALID" if item.valid else "REJECTED",
+                    "finger_detected": s.finger_detected,
+                    "rejection_codes": item.reasons,
+                    "warning_codes": item.warnings,
+                    "raw_measurement": {
+                        "MAX30102": {"red": s.max_red, "ir": s.max_ir},
+                        "AS7341": s.as7341_channels,
+                    },
+                }
+                jsonl_file.write(json.dumps(rec) + "\n")
 
         return rejected_file, diag_file
+
