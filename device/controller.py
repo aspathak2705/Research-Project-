@@ -65,9 +65,8 @@ class DeviceController:
 
         self._transition(DeviceState.ACQUIRE)
         evaluated_samples: list[EvaluatedSample] = []
-        prev_as_channels = None
-        prev_red = None
-        prev_ir = None
+        as_history: list[dict[str, int]] = []
+        max_history: list[tuple[int, int]] = []
 
         for _ in range(sample_count):
             try:
@@ -80,18 +79,19 @@ class DeviceController:
                 red=sample.max_red,
                 ir=sample.max_ir,
                 finger_detected=sample.finger_detected,
-                previous_red=prev_red,
-                previous_ir=prev_ir,
+                overflow_counter=0,
+                history=max_history,
             )
 
             as_val = self.as7341_validator.validate_sample(
                 channels=sample.as7341_channels,
-                previous_sample_channels=prev_as_channels,
+                measurement_complete=True,
+                smux_complete=True,
+                history=as_history,
             )
 
-            prev_red = sample.max_red
-            prev_ir = sample.max_ir
-            prev_as_channels = sample.as7341_channels
+            max_history.append((sample.max_red, sample.max_ir))
+            as_history.append(sample.as7341_channels)
 
             combined_reasons = list(dict.fromkeys(max_val.reasons + as_val.reasons))
             combined_warnings = list(dict.fromkeys(max_val.warnings + as_val.warnings))
@@ -106,6 +106,7 @@ class DeviceController:
                 )
             )
             time.sleep(0.05)
+
 
         self._transition(DeviceState.QUALITY_CHECK)
         session_result = self.session_validator.validate_session(evaluated_samples)

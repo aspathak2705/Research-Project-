@@ -65,12 +65,28 @@ class MAX30102Sensor:
         self._write_u8(self.REG_MULTI_LED_CTRL2, 0x00)
         LOGGER.info("MAX30102 initialized at 0x57.")
 
-    def read_sample(self) -> dict[str, int]:
+    def get_fifo_pointers(self) -> dict[str, int]:
+        if self._smbus is None:
+            raise HardwareError("MAX30102 I2C bus unavailable.")
+        try:
+            wr_ptr = self._read_u8(self.REG_FIFO_WR_PTR)
+            ovf_cnt = self._read_u8(self.REG_OVF_COUNTER)
+            rd_ptr = self._read_u8(self.REG_FIFO_RD_PTR)
+            return {"write_pointer": wr_ptr, "overflow_counter": ovf_cnt, "read_pointer": rd_ptr}
+        except OSError as exc:
+            raise HardwareError("Failed to read MAX30102 FIFO pointers.") from exc
+
+    def read_sample_reading(self) -> Max30102Reading:
         raw = self._read_fifo_frame()
         red = ((raw[0] << 16) | (raw[1] << 8) | raw[2]) & 0x03FFFF
         ir = ((raw[3] << 16) | (raw[4] << 8) | raw[5]) & 0x03FFFF
         self._last_sample = Max30102Reading(red=red, ir=ir, finger_detected=ir >= self.FINGER_THRESHOLD)
-        return {"red": red, "ir": ir}
+        return self._last_sample
+
+    def read_sample(self) -> dict[str, int]:
+        reading = self.read_sample_reading()
+        return {"red": reading.red, "ir": reading.ir}
+
 
     def finger_detected(self) -> bool:
         if self._last_sample.ir == 0:

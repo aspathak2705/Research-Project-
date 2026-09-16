@@ -2,20 +2,26 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Sequence
 
 from config.constants import (
     AS7341_ADC_MAX,
+    AS7341_ADC_MIN,
+    AS7341_ADC_OUT_OF_RANGE,
+    AS7341_ALL_ZERO,
+    AS7341_CONSTANT_SPECTRUM,
+    AS7341_INVALID_CHANNEL_SET,
+    AS7341_INVALID_NUMERIC_VALUE,
+    AS7341_MEASUREMENT_INCOMPLETE,
+    AS7341_MISSING_CHANNEL,
+    AS7341_NEAR_ZERO,
     AS7341_NEAR_ZERO_THRESHOLD,
+    AS7341_SATURATION,
     AS7341_SATURATION_LIMIT,
-    REASON_AS7341_CONSTANT_SPECTRUM,
-    REASON_AS7341_INVALID_RANGE,
-    REASON_AS7341_MISSING_CHANNEL,
-    REASON_AS7341_NEAR_ZERO,
-    REASON_AS7341_NON_NUMERIC,
-    REASON_AS7341_SATURATION,
-    REASON_AS7341_STALE_DATA,
-    REASON_AS7341_ZERO_SIGNAL,
+    AS7341_SMUX_INCOMPLETE,
+    AS7341_STALE_DATA,
+    AS7341_TEMPORAL_SATURATION_ANOMALY,
+    AS7341_TEMPORAL_ZERO_COLLAPSE,
 )
 
 EXPECTED_CHANNELS = ("415", "445", "480", "515", "555", "590", "630", "680")
@@ -41,46 +47,62 @@ class AS7341ValidationResult:
 class AS7341Validator:
     def __init__(
         self,
+        adc_min: int = AS7341_ADC_MIN,
+        adc_max: int = AS7341_ADC_MAX,
         near_zero_threshold: int = AS7341_NEAR_ZERO_THRESHOLD,
         saturation_threshold: int = AS7341_SATURATION_LIMIT,
-        adc_max: int = AS7341_ADC_MAX,
+        stale_limit: int = 3,
     ) -> None:
+        self.adc_min = adc_min
+        self.adc_max = adc_max
         self.near_zero_threshold = near_zero_threshold
         self.saturation_threshold = saturation_threshold
-        self.adc_max = adc_max
+        self.stale_limit = stale_limit
 
     def validate_sample(
         self,
         channels: dict[str, Any] | None,
-        previous_sample_channels: dict[str, Any] | None = None,
+        measurement_complete: bool = True,
+        smux_complete: bool = True,
+        history: Sequence[dict[str, Any]] | None = None,
     ) -> AS7341ValidationResult:
         reasons: list[str] = []
         warnings: list[str] = []
         channel_results: dict[str, ChannelValidationResult] = {}
         saturated_channels: list[str] = []
 
+        # Check 8: Measurement completion
+        if not measurement_complete:
+            reasons.append(AS7341_MEASUREMENT_INCOMPLETE)
+
+        # Check 9: SMUX completion
+        if not smux_complete:
+            reasons.append(AS7341_SMUX_INCOMPLETE)
+
         if channels is None or not isinstance(channels, dict):
+            reasons.append(AS7341_MISSING_CHANNEL)
+            unique_reasons = list(dict.fromkeys(reasons))
             return AS7341ValidationResult(
                 valid=False,
-                reasons=[REASON_AS7341_MISSING_CHANNEL],
+                reasons=unique_reasons,
                 warnings=[],
                 channel_results={},
                 saturated_channels=[],
             )
 
-        # Check 1: Missing channels
+        # Check 1: Channel set completeness and validity
         for ch in EXPECTED_CHANNELS:
             if ch not in channels:
-                reasons.append(REASON_AS7341_MISSING_CHANNEL)
+                reasons.append(AS7341_MISSING_CHANNEL)
                 channel_results[ch] = ChannelValidationResult(
-                    channel=ch, value=None, valid=False, reasons=[REASON_AS7341_MISSING_CHANNEL]
+                    channel=ch, value=None, valid=False, reasons=[AS7341_MISSING_CHANNEL]
                 )
 
-        if len(channels) != len(EXPECTED_CHANNELS):
-            if REASON_AS7341_MISSING_CHANNEL not in reasons:
-                reasons.append(REASON_AS7341_MISSING_CHANNEL)
+        extra_keys = [k for k in channels if k not in EXPECTED_CHANNELS]
+        if extra_keys or len(channels) != len(EXPECTED_CHANNELS):
+            reasons.append(AS7341_INVALID_CHANNEL_SET)
 
-        # Check 2: Non-numeric, NaN, Inf, and range checks per channel
+        # Check 2 & 3 & 7: Numeric validity, ADC range, and Saturation per channel
         valid_numeric_values: list[int] = []
 
         for ch in EXPECTED_CHANNELS:
@@ -91,18 +113,18 @@ class AS7341Validator:
             ch_reasons: list[str] = []
 
             if val is None or isinstance(val, bool) or not isinstance(val, (int, float)):
-                ch_reasons.append(REASON_AS7341_NON_NUMERIC)
+                ch_reasons.append(AS7341_INVALID_NUMERIC_VALUE)
             elif math.isnan(val) or math.isinf(val):
-                ch_reasons.append(REASON_AS7341_NON_NUMERIC)
+                ch_reasons.append(AS7341_INVALID_NUMERIC_VALUE)
             else:
                 numeric_val = int(val)
-                if numeric_val < 0 or numeric_val > self.adc_max:
-                    ch_reasons.append(REASON_AS7341_INVALID_RANGE)
+                if numeric_val < self.adc_min or numeric_val > self.adc_max:
+                    ch_reasons.append(AS7341_ADC_OUT_OF_RANGE)
                 else:
                     valid_numeric_values.append(numeric_val)
 
                 if numeric_val >= self.saturation_threshold:
-                    ch_reasons.append(REASON_AS7341_SATURATION)
+                    ch_reasons.append(AS7341_SATURATION)
                     saturated_channels.append(ch)
 
             is_valid = len(ch_reasons) == 0
@@ -110,35 +132,50 @@ class AS7341Validator:
                 channel=ch, value=val, valid=is_valid, reasons=ch_reasons
             )
 
-        if any(r == REASON_AS7341_NON_NUMERIC for cr in channel_results.values() for r in cr.reasons):
-            reasons.append(REASON_AS7341_NON_NUMERIC)
-        if any(r == REASON_AS7341_INVALID_RANGE for cr in channel_results.values() for r in cr.reasons):
-            reasons.append(REASON_AS7341_INVALID_RANGE)
+        if any(r == AS7341_INVALID_NUMERIC_VALUE for cr in channel_results.values() for r in cr.reasons):
+            reasons.append(AS7341_INVALID_NUMERIC_VALUE)
+        if any(r == AS7341_ADC_OUT_OF_RANGE for cr in channel_results.values() for r in cr.reasons):
+            reasons.append(AS7341_ADC_OUT_OF_RANGE)
 
         if saturated_channels:
-            reasons.append(REASON_AS7341_SATURATION)
+            reasons.append(AS7341_SATURATION)
 
-        # Numerical checks across spectrum if all numeric values available
+        # Numerical checks across spectrum
         if len(valid_numeric_values) == len(EXPECTED_CHANNELS):
-            # Check 3: All-zero
+            # Check 4: All-zero
             if all(v == 0 for v in valid_numeric_values):
-                reasons.append(REASON_AS7341_ZERO_SIGNAL)
+                reasons.append(AS7341_ALL_ZERO)
 
-            # Check 4: Near-zero
+            # Check 5: Near-zero
             elif all(v <= self.near_zero_threshold for v in valid_numeric_values):
-                reasons.append(REASON_AS7341_NEAR_ZERO)
+                reasons.append(AS7341_NEAR_ZERO)
 
-            # Check 5: Constant spectrum across channels
+            # Check 6: Constant spectrum
             if len(set(valid_numeric_values)) == 1:
-                reasons.append(REASON_AS7341_CONSTANT_SPECTRUM)
+                reasons.append(AS7341_CONSTANT_SPECTRUM)
 
-            # Check 10: Temporal consistency (stale duplicate frames)
-            if previous_sample_channels and isinstance(previous_sample_channels, dict):
-                prev_vals = [previous_sample_channels.get(ch) for ch in EXPECTED_CHANNELS]
-                if prev_vals == valid_numeric_values:
-                    warnings.append(REASON_AS7341_STALE_DATA)
+        # Phase 2B Temporal Checks using history
+        if history and len(history) >= 1:
+            recent = list(history)
 
-        # Deduplicate reasons while preserving order
+            # Temporal Check 4: Stale frames
+            if len(recent) >= self.stale_limit:
+                last_n = recent[-self.stale_limit:]
+                if all(h == channels for h in last_n):
+                    warnings.append(AS7341_STALE_DATA)
+
+            # Temporal Check 2: Zero collapse
+            if all(v == 0 for v in valid_numeric_values):
+                prev_sample = recent[-1]
+                if isinstance(prev_sample, dict) and any(prev_sample.get(ch, 0) > self.near_zero_threshold for ch in EXPECTED_CHANNELS):
+                    reasons.append(AS7341_TEMPORAL_ZERO_COLLAPSE)
+
+            # Temporal Check 3: Saturation collapse
+            if len(saturated_channels) == len(EXPECTED_CHANNELS):
+                prev_sample = recent[-1]
+                if isinstance(prev_sample, dict) and any(prev_sample.get(ch, 0) < self.saturation_threshold for ch in EXPECTED_CHANNELS):
+                    reasons.append(AS7341_TEMPORAL_SATURATION_ANOMALY)
+
         unique_reasons = list(dict.fromkeys(reasons))
         overall_valid = len(unique_reasons) == 0
 
@@ -149,3 +186,4 @@ class AS7341Validator:
             channel_results=channel_results,
             saturated_channels=saturated_channels,
         )
+
