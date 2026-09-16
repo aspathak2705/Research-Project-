@@ -16,17 +16,12 @@ class I2CSharedBus:
 
 
 class I2CBus:
-    def __init__(self, bus_id: int = 1, mock_mode: bool = True) -> None:
+    def __init__(self, bus_id: int = 1) -> None:
         self.bus_id = bus_id
-        self.mock_mode = mock_mode
         self._busio = None
         self._smbus = None
 
     def connect(self) -> I2CSharedBus:
-        if self.mock_mode:
-            LOGGER.info("Mock I2C mode enabled. Shared bus objects not opened.")
-            return self.shared_bus
-
         self._initialize_busio()
         self._initialize_smbus()
         devices = self.scan()
@@ -44,10 +39,8 @@ class I2CBus:
         return self._smbus
 
     def scan(self) -> list[int]:
-        if self.mock_mode:
-            return []
-
         if self._busio is not None:
+
             locked = False
             try:
                 while not self._busio.try_lock():

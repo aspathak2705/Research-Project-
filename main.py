@@ -11,10 +11,14 @@ from hardware.as7341 import AS7341Sensor
 from hardware.i2c_bus import I2CBus
 from hardware.max30102 import MAX30102Sensor
 from hardware.sensor_manager import SensorManager
-from processing.signal_quality import SignalQualityChecker
+from processing.as7341_validator import AS7341Validator
+from processing.max30102_validator import MAX30102Validator
+from processing.session_validator import SessionValidator
 from storage.csv_storage import CSVStorage
+from storage.diagnostic_storage import DiagnosticStorage
 from storage.patient_manager import PatientDataManager
 from utils.helpers import ensure_directory, setup_logging
+
 
 
 def parse_args() -> argparse.Namespace:
@@ -29,23 +33,30 @@ def build_controller(settings: Settings) -> DeviceController:
     ensure_directory(settings.temp_root)
     ensure_directory(settings.upload_queue_root)
 
-    bus = I2CBus(mock_mode=settings.mock_mode)
+    bus = I2CBus()
     shared_bus = bus.connect()
 
     sensor_manager = SensorManager(
-        max30102=MAX30102Sensor(shared_bus=shared_bus, mock_mode=settings.mock_mode),
-        as7341=AS7341Sensor(shared_bus=shared_bus, mock_mode=settings.mock_mode),
+        max30102=MAX30102Sensor(shared_bus=shared_bus),
+        as7341=AS7341Sensor(shared_bus=shared_bus),
     )
-    quality_checker = SignalQualityChecker()
+    as7341_validator = AS7341Validator()
+    max30102_validator = MAX30102Validator()
+    session_validator = SessionValidator()
+
     patient_manager = PatientDataManager(settings.raw_data_root / "Patient_Data")
     csv_storage = CSVStorage()
+    diagnostic_storage = DiagnosticStorage(settings.data_root)
     drive_sync = GoogleDriveSync(settings.upload_queue_root, settings.google_drive_root)
 
     return DeviceController(
         sensor_manager=sensor_manager,
-        quality_checker=quality_checker,
+        as7341_validator=as7341_validator,
+        max30102_validator=max30102_validator,
+        session_validator=session_validator,
         patient_manager=patient_manager,
         csv_storage=csv_storage,
+        diagnostic_storage=diagnostic_storage,
         drive_sync=drive_sync,
     )
 
@@ -64,10 +75,11 @@ def main() -> int:
         return 1
 
     print(f"Patient: {result.patient_name}")
-    print(f"Samples: {result.sample_count}")
-    print(f"Stored: {result.session_file}")
-    print(f"Queued upload job: {result.queued_job}")
+    print(f"Valid Samples: {result.session_result.valid_samples}/{result.session_result.attempted_samples}")
+    print(f"Stored Research CSV: {result.session_file}")
+    print(f"Diagnostics: {result.diagnostic_file}")
     return 0
+
 
 
 if __name__ == "__main__":

@@ -47,22 +47,15 @@ class AS7341Sensor:
     def __init__(
         self,
         shared_bus: I2CSharedBus | None = None,
-        mock_mode: bool = True,
         integration_time_ms: float = 50.0,
         gain: int = 16,
     ) -> None:
-        self.mock_mode = mock_mode
         self.shared_bus = shared_bus
         self.integration_time_ms = integration_time_ms
         self.gain = gain
         self._smbus = None if shared_bus is None else shared_bus.smbus_bus
-        self._sample_index = 0
 
     def initialize(self) -> None:
-        if self.mock_mode:
-            LOGGER.info("AS7341 mock mode enabled.")
-            return
-
         if self._smbus is None:
             raise HardwareError("AS7341 requires shared smbus2 object.")
 
@@ -75,8 +68,6 @@ class AS7341Sensor:
 
     def set_integration_time(self, integration_time_ms: float) -> None:
         self.integration_time_ms = integration_time_ms
-        if self.mock_mode:
-            return
 
         if integration_time_ms <= 0:
             raise HardwareError("AS7341 integration time must be positive.")
@@ -89,20 +80,12 @@ class AS7341Sensor:
 
     def set_gain(self, gain: int) -> None:
         self.gain = gain
-        if self.mock_mode:
-            return
-
         reg_value = self.GAIN_MAP.get(gain)
         if reg_value is None:
             raise HardwareError(f"Unsupported AS7341 gain: {gain}")
         self._write_u8(self.CFG1, reg_value)
 
     def read_channels(self) -> dict[str, int]:
-        if self.mock_mode:
-            channels = self._mock_channels()
-            print(channels)
-            return channels
-
         first_bank = self._read_bank(self._smux_config_f1_f4_clear_nir())
         second_bank = self._read_bank(self._smux_config_f5_f8_clear_nir())
         channels = {
@@ -115,7 +98,6 @@ class AS7341Sensor:
             "630": second_bank[2],
             "680": second_bank[3],
         }
-        print(channels)
         return channels
 
     def read_sample(self) -> AS7341Reading:
@@ -124,10 +106,15 @@ class AS7341Sensor:
         return AS7341Reading(channels=channels, saturated=saturated)
 
     def close(self) -> None:
-        if not self.mock_mode and self._smbus is not None:
-            self._write_u8(self.ENABLE, 0x00)
+        if self._smbus is not None:
+            try:
+                self._write_u8(self.ENABLE, 0x00)
+            except Exception as exc:
+                LOGGER.warning("Failed to reset AS7341 on close: %s", exc)
 
     def _read_bank(self, smux_config: dict[int, int]) -> tuple[int, int, int, int, int, int]:
+        if self._smbus is None:
+            raise HardwareError("AS7341 I2C bus unavailable.")
         self._write_u8(self.ENABLE, 0x01)
         self._write_u8(self.CFG0, 0x10)
         for register, value in smux_config.items():
@@ -135,28 +122,20 @@ class AS7341Sensor:
         self._write_u8(self.SMUX_CMD, 0x10)
         self._write_u8(self.ENABLE, 0x13)
         time.sleep(max(self.integration_time_ms / 1000.0, 0.05))
-        raw = self._smbus.read_i2c_block_data(self.ADDRESS, self.CH0_DATA_L, 12)
+        try:
+            raw = self._smbus.read_i2c_block_data(self.ADDRESS, self.CH0_DATA_L, 12)
+        except OSError as exc:
+            raise HardwareError("AS7341 read bank failed.") from exc
         return tuple(raw[index] | (raw[index + 1] << 8) for index in range(0, 12, 2))
 
     def _write_u8(self, register: int, value: int) -> None:
+        if self._smbus is None:
+            raise HardwareError("AS7341 I2C bus unavailable.")
         try:
             self._smbus.write_byte_data(self.ADDRESS, register, value & 0xFF)
         except OSError as exc:
             raise HardwareError(f"AS7341 write failed at register 0x{register:02X}.") from exc
 
-    def _mock_channels(self) -> dict[str, int]:
-        self._sample_index += 1
-        base = 12000 + (self._sample_index % 5) * 125
-        return {
-            "415": base + 10,
-            "445": base + 55,
-            "480": base + 95,
-            "515": base + 135,
-            "555": base + 175,
-            "590": base + 215,
-            "630": base + 255,
-            "680": base + 295,
-        }
 
     @staticmethod
     def _smux_config_f1_f4_clear_nir() -> dict[int, int]:

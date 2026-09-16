@@ -36,20 +36,18 @@ class MAX30102Sensor:
     REG_PART_ID = 0xFF
     FINGER_THRESHOLD = 15_000
 
-    def __init__(self, shared_bus: I2CSharedBus | None = None, mock_mode: bool = True) -> None:
-        self.mock_mode = mock_mode
+    def __init__(self, shared_bus: I2CSharedBus | None = None) -> None:
         self.shared_bus = shared_bus
         self._smbus = None if shared_bus is None else shared_bus.smbus_bus
-        self._sample_index = 0
         self._last_sample = Max30102Reading(red=0, ir=0, finger_detected=False)
 
     def initialize(self) -> None:
-        if self.mock_mode:
-            LOGGER.info("MAX30102 mock mode enabled.")
-            return
-
         if self._smbus is None:
             raise HardwareError("MAX30102 requires shared smbus2 object.")
+
+        part_id = self._read_u8(self.REG_PART_ID)
+        if part_id != 0x15:
+            LOGGER.warning("MAX30102 Part ID read 0x%02X (expected 0x15). Proceeding with register setup.", part_id)
 
         self._write_u8(self.REG_MODE_CONFIG, 0x40)
         time.sleep(0.05)
@@ -68,48 +66,45 @@ class MAX30102Sensor:
         LOGGER.info("MAX30102 initialized at 0x57.")
 
     def read_sample(self) -> dict[str, int]:
-        if self.mock_mode:
-            self._last_sample = self._mock_sample()
-            red = self._last_sample.red
-            ir = self._last_sample.ir
-            print("RED:", red, "IR:", ir)
-            return {"red": red, "ir": ir}
-
         raw = self._read_fifo_frame()
         red = ((raw[0] << 16) | (raw[1] << 8) | raw[2]) & 0x03FFFF
         ir = ((raw[3] << 16) | (raw[4] << 8) | raw[5]) & 0x03FFFF
         self._last_sample = Max30102Reading(red=red, ir=ir, finger_detected=ir >= self.FINGER_THRESHOLD)
-        print("RED:", red, "IR:", ir)
         return {"red": red, "ir": ir}
 
     def finger_detected(self) -> bool:
-        if self.mock_mode:
-            return True
-
         if self._last_sample.ir == 0:
             self.read_sample()
         return self._last_sample.ir >= self.FINGER_THRESHOLD
 
     def close(self) -> None:
-        if not self.mock_mode and self._smbus is not None:
-            self._write_u8(self.REG_MODE_CONFIG, 0x80)
+        if self._smbus is not None:
+            try:
+                self._write_u8(self.REG_MODE_CONFIG, 0x80)
+            except Exception as exc:
+                LOGGER.warning("Failed to reset MAX30102 on close: %s", exc)
 
     def _read_fifo_frame(self) -> list[int]:
+        if self._smbus is None:
+            raise HardwareError("MAX30102 I2C bus unavailable.")
         try:
             return self._smbus.read_i2c_block_data(self.ADDRESS, self.REG_FIFO_DATA, 6)
         except OSError as exc:
             raise HardwareError("MAX30102 FIFO read failed.") from exc
 
+    def _read_u8(self, register: int) -> int:
+        if self._smbus is None:
+            raise HardwareError("MAX30102 I2C bus unavailable.")
+        try:
+            return self._smbus.read_byte_data(self.ADDRESS, register)
+        except OSError as exc:
+            raise HardwareError(f"MAX30102 read failed at register 0x{register:02X}.") from exc
+
     def _write_u8(self, register: int, value: int) -> None:
+        if self._smbus is None:
+            raise HardwareError("MAX30102 I2C bus unavailable.")
         try:
             self._smbus.write_byte_data(self.ADDRESS, register, value & 0xFF)
         except OSError as exc:
             raise HardwareError(f"MAX30102 write failed at register 0x{register:02X}.") from exc
 
-    def _mock_sample(self) -> Max30102Reading:
-        self._sample_index += 1
-        pulse = int(sin(self._sample_index / 2.5) * 220)
-        drift = (self._sample_index % 5) * 15
-        ir = 50_000 + drift - pulse
-        red = 46_000 + drift + pulse
-        return Max30102Reading(red=red, ir=ir, finger_detected=True)

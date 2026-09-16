@@ -10,6 +10,17 @@ from hardware.max30102 import MAX30102Sensor
 LOGGER = logging.getLogger(__name__)
 
 
+from enum import Enum
+
+
+class SelfTestStatus(Enum):
+    SENSOR_READY = "SENSOR_READY"
+    DEVICE_NOT_FOUND = "DEVICE_NOT_FOUND"
+    INITIALIZATION_FAILED = "INITIALIZATION_FAILED"
+    MEASUREMENT_FAILED = "MEASUREMENT_FAILED"
+    INVALID_MEASUREMENT = "INVALID_MEASUREMENT"
+
+
 @dataclass(frozen=True)
 class UnifiedSample:
     timestamp: float
@@ -54,15 +65,39 @@ class SensorManager:
         self.max30102 = max30102
         self.as7341 = as7341
 
-    def self_test(self) -> bool:
-        self.max30102.initialize()
-        self.as7341.initialize()
-        return True
+    def self_test(self) -> tuple[SelfTestStatus, str]:
+        try:
+            self.max30102.initialize()
+        except Exception as exc:
+            LOGGER.error("MAX30102 initialization failed: %s", exc)
+            return SelfTestStatus.INITIALIZATION_FAILED, f"MAX30102 init failed: {exc}"
+
+        try:
+            self.as7341.initialize()
+        except Exception as exc:
+            LOGGER.error("AS7341 initialization failed: %s", exc)
+            return SelfTestStatus.INITIALIZATION_FAILED, f"AS7341 init failed: {exc}"
+
+        try:
+            test_max = self.max30102.read_sample()
+            test_as = self.as7341.read_sample()
+            if test_max.get("red") is None or test_max.get("ir") is None:
+                return SelfTestStatus.INVALID_MEASUREMENT, "MAX30102 sample returned None"
+            if len(test_as.channels) != 8:
+                return SelfTestStatus.INVALID_MEASUREMENT, "AS7341 channel count incomplete"
+        except Exception as exc:
+            LOGGER.error("Sensor self-test measurement read failed: %s", exc)
+            return SelfTestStatus.MEASUREMENT_FAILED, f"Measurement test read failed: {exc}"
+
+        return SelfTestStatus.SENSOR_READY, "All physical sensors operational"
 
     def wait_for_finger(self, retries: int = 5, delay_seconds: float = 0.25) -> bool:
         for _ in range(retries):
-            if self.max30102.finger_detected():
-                return True
+            try:
+                if self.max30102.finger_detected():
+                    return True
+            except Exception as exc:
+                LOGGER.warning("Error checking finger status: %s", exc)
             time.sleep(delay_seconds)
         return False
 
@@ -90,3 +125,4 @@ class SensorManager:
     def close(self) -> None:
         self.max30102.close()
         self.as7341.close()
+
