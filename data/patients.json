@@ -1,0 +1,23 @@
+[
+  {
+    "patient_id": "TEST_001",
+    "age": 30,
+    "sex": "Male",
+    "notes": "Unit test patient",
+    "created_at": "2026-09-18T19:55:56.763250"
+  },
+  {
+    "patient_id": "TEST_PATIENT_999",
+    "age": 28,
+    "sex": "Female",
+    "notes": "Research participant",
+    "created_at": "2026-09-18T20:22:14.580012"
+  },
+  {
+    "patient_id": "TEST_PATIENT_1789743377615",
+    "age": 28,
+    "sex": "Female",
+    "notes": "Research participant",
+    "created_at": "2026-09-18T20:26:17.619959"
+  }
+]

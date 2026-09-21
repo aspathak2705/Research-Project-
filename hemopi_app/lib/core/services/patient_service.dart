@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../models/patient.dart';
+import '../network/api_client.dart';
 
 abstract class PatientService {
   ValueListenable<List<Patient>> get patientsNotifier;
@@ -12,14 +13,34 @@ abstract class PatientService {
   });
 }
 
-class Phase1PatientService implements PatientService {
+class HttpPatientService implements PatientService {
+  final ApiClient apiClient;
   final ValueNotifier<List<Patient>> _patients = ValueNotifier([]);
+
+  HttpPatientService({ApiClient? client}) : apiClient = client ?? ApiClient();
 
   @override
   ValueListenable<List<Patient>> get patientsNotifier => _patients;
 
   @override
   Future<List<Patient>> getPatients() async {
+    try {
+      final res = await apiClient.get('/api/patients');
+      if (res != null && res['patients'] is List) {
+        final List list = res['patients'];
+        final parsed = list.map((p) {
+          return Patient(
+            patientId: p['patient_id'],
+            age: p['age'],
+            sex: p['sex'],
+            notes: p['notes'],
+            createdAt: p['created_at'] != null ? DateTime.parse(p['created_at']) : DateTime.now(),
+          );
+        }).toList();
+        _patients.value = parsed;
+        return parsed;
+      }
+    } catch (_) {}
     return _patients.value;
   }
 
@@ -30,14 +51,20 @@ class Phase1PatientService implements PatientService {
     String? sex,
     String? notes,
   }) async {
-    final newPatient = Patient(
-      patientId: patientId,
-      age: age,
-      sex: sex,
-      notes: notes,
-      createdAt: DateTime.now(),
+    final res = await apiClient.post('/api/patients', {
+      'patient_id': patientId,
+      'age': age,
+      'sex': sex,
+      'notes': notes,
+    });
+    final p = Patient(
+      patientId: res['patient_id'],
+      age: res['age'],
+      sex: res['sex'],
+      notes: res['notes'],
+      createdAt: res['created_at'] != null ? DateTime.parse(res['created_at']) : DateTime.now(),
     );
-    _patients.value = [..._patients.value, newPatient];
-    return newPatient;
+    _patients.value = [..._patients.value, p];
+    return p;
   }
 }

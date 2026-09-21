@@ -1,22 +1,45 @@
 import '../models/wifi_network.dart';
+import '../network/api_client.dart';
 
 abstract class WifiService {
   Future<List<WifiNetwork>> getAvailableNetworks();
   Future<bool> connectToNetwork(String ssid, String password);
 }
 
-class Phase1WifiService implements WifiService {
-  // Phase 1 does not manipulate Wi-Fi or produce fake scan results.
-  // Returns empty list awaiting Pi API implementation in Phase 2.
+class HttpWifiService implements WifiService {
+  final ApiClient apiClient;
+
+  HttpWifiService({ApiClient? client}) : apiClient = client ?? ApiClient();
+
   @override
   Future<List<WifiNetwork>> getAvailableNetworks() async {
-    await Future.delayed(const Duration(milliseconds: 500));
+    try {
+      final res = await apiClient.get('/api/network/wifi');
+      if (res != null && res['networks'] is List) {
+        final List networksJson = res['networks'];
+        return networksJson.map((n) {
+          return WifiNetwork(
+            ssid: n['ssid'] ?? 'Unknown',
+            signalStrength: '${n['signal_strength'] ?? 0}%',
+            isSecured: n['secured'] ?? true,
+          );
+        }).toList();
+      }
+    } catch (_) {}
     return [];
   }
 
   @override
   Future<bool> connectToNetwork(String ssid, String password) async {
-    await Future.delayed(const Duration(milliseconds: 1000));
-    return true;
+    try {
+      final res = await apiClient.post('/api/network/wifi/connect', {
+        'ssid': ssid,
+        'password': password,
+      });
+      if (res != null && res['status'] == 'ok') {
+        return true;
+      }
+    } catch (_) {}
+    return false;
   }
 }

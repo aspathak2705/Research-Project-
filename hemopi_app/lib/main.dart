@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app/app.dart';
+import 'core/network/api_client.dart';
 import 'core/services/device_service.dart';
 import 'core/services/wifi_service.dart';
 import 'core/services/patient_service.dart';
@@ -10,12 +11,14 @@ import 'core/services/diagnostics_service.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final deviceService = Phase1DeviceService();
-  final wifiService = Phase1WifiService();
-  final patientService = Phase1PatientService();
-  final measurementService = Phase1MeasurementService();
-  final sessionService = Phase1SessionService();
-  final diagnosticsService = Phase1DiagnosticsService();
+  final apiClient = ApiClient(baseUrl: 'http://hemopi.local:8000');
+
+  final deviceService = HttpDeviceService(client: apiClient);
+  final wifiService = HttpWifiService(client: apiClient);
+  final patientService = HttpPatientService(client: apiClient);
+  final measurementService = HttpMeasurementService(client: apiClient);
+  final sessionService = HttpSessionService(client: apiClient);
+  final diagnosticsService = HttpDiagnosticsService(client: apiClient);
 
   runApp(HemoPiApp(
     deviceService: deviceService,
