@@ -28,10 +28,11 @@ class SessionResultScreen extends StatelessWidget {
               child: Column(
                 children: [
                   _buildRow('Subject ID', session.patientId),
-                  _buildRow('Timestamp', session.timestamp.toIso8601String().replaceAll('T', ' ').substring(0, 19)),
+                  _buildRow('Timestamp', session.createdAt.toIso8601String().replaceAll('T', ' ').substring(0, 19)),
                   _buildRow('Status', session.status.name.toUpperCase()),
-                  _buildRow('Raw Readings Count', '${session.rawSampleCount} samples'),
-                  _buildRow('CSV File Saved', session.csvPath ?? 'Pending save'),
+                  _buildRow('Attempted Samples', '${session.attemptedSamples} samples'),
+                  _buildRow('Valid Samples', '${session.validSamples} samples'),
+                  _buildRow('CSV File Saved', session.localValidCsvFile ?? 'Pending save'),
                 ],
               ),
             ),

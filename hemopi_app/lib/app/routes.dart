@@ -13,4 +13,10 @@ class AppRoutes {
   static const String sessionHistory = '/session-history';
   static const String sessionDetails = '/session-details';
   static const String diagnostics = '/diagnostics';
+
+  // Report & Storage management routes
+  static const String recentReports = '/recent-reports';
+  static const String reportHistory = '/report-history';
+  static const String reportDetails = '/report-details';
+  static const String localStorageManagement = '/local-storage-management';
 }

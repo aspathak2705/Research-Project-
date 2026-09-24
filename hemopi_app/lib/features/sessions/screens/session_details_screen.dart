@@ -22,24 +22,27 @@ class SessionDetailsScreen extends StatelessWidget {
           children: [
             CustomCard(
               title: 'Session Metadata',
-              subtitle: 'Subject: ${session.patientId}',
+              subtitle: 'Subject ID: ${session.patientId}',
               child: Column(
                 children: [
                   _buildRow('Session Identifier', session.sessionId),
                   _buildRow('Subject Identifier', session.patientId),
-                  _buildRow('Timestamp', session.timestamp.toIso8601String().replaceAll('T', ' ').substring(0, 19)),
+                  _buildRow('Created At', session.createdAt.toIso8601String().replaceAll('T', ' ').substring(0, 19)),
                   _buildRow('Status', session.status.name.toUpperCase()),
-                  _buildRow('Total Samples', '${session.rawSampleCount}'),
-                  _buildRow('CSV Storage Path', session.csvPath ?? 'N/A'),
+                  _buildRow('Attempted Samples', '${session.attemptedSamples}'),
+                  _buildRow('Valid Samples', '${session.validSamples}'),
+                  _buildRow('Rejected Samples', '${session.rejectedSamples}'),
+                  _buildRow('Validation Status', session.validationStatus),
+                  _buildRow('Local CSV File', session.localValidCsvFile ?? 'Not generated / pending'),
                 ],
               ),
             ),
             const SizedBox(height: 16),
             const CustomCard(
-              title: 'Raw Sensor Log Access',
-              subtitle: 'Research Storage Verification',
+              title: 'Android Local Storage Notice',
+              subtitle: 'Local Client Persistence',
               child: Text(
-                'Raw CSV files are stored locally on the Raspberry Pi acquisition unit in the designated research storage directory. Transfer or inspection occurs via local SSH/SFTP.',
+                'Session metadata and physical acquisition CSV files are saved locally on this Android device. The Raspberry Pi functions as a sensor acquisition node and does NOT maintain permanent research records.',
                 style: TextStyle(fontSize: 13, color: Colors.black87),
               ),
             ),

@@ -7,8 +7,10 @@ import '../core/services/patient_service.dart';
 import '../core/services/measurement_service.dart';
 import '../core/services/session_service.dart';
 import '../core/services/diagnostics_service.dart';
+import '../core/services/report_service.dart';
 import '../core/models/patient.dart';
 import '../core/models/measurement_session.dart';
+import '../core/models/report_metadata.dart';
 
 import '../features/onboarding/screens/device_discovery_screen.dart';
 import '../features/wifi/screens/wifi_setup_screen.dart';
@@ -24,6 +26,10 @@ import '../features/sessions/screens/session_result_screen.dart';
 import '../features/sessions/screens/session_history_screen.dart';
 import '../features/sessions/screens/session_details_screen.dart';
 import '../features/diagnostics/screens/diagnostics_screen.dart';
+import '../features/reports/screens/recent_reports_screen.dart';
+import '../features/reports/screens/report_history_screen.dart';
+import '../features/reports/screens/report_details_screen.dart';
+import '../features/storage/screens/local_storage_management_screen.dart';
 
 class HemoPiApp extends StatelessWidget {
   final DeviceService deviceService;
@@ -32,6 +38,7 @@ class HemoPiApp extends StatelessWidget {
   final MeasurementService measurementService;
   final SessionService sessionService;
   final DiagnosticsService diagnosticsService;
+  final ReportService reportService;
 
   const HemoPiApp({
     super.key,
@@ -41,6 +48,7 @@ class HemoPiApp extends StatelessWidget {
     required this.measurementService,
     required this.sessionService,
     required this.diagnosticsService,
+    required this.reportService,
   });
 
   @override
@@ -68,6 +76,7 @@ class HemoPiApp extends StatelessWidget {
               builder: (_) => DashboardScreen(
                 deviceService: deviceService,
                 patientService: patientService,
+                reportService: reportService,
               ),
             );
           case AppRoutes.deviceStatus:
@@ -122,6 +131,27 @@ class HemoPiApp extends StatelessWidget {
           case AppRoutes.diagnostics:
             return MaterialPageRoute(
               builder: (_) => DiagnosticsScreen(diagnosticsService: diagnosticsService),
+            );
+          case AppRoutes.recentReports:
+            return MaterialPageRoute(
+              builder: (_) => RecentReportsScreen(reportService: reportService),
+            );
+          case AppRoutes.reportHistory:
+            return MaterialPageRoute(
+              builder: (_) => ReportHistoryScreen(reportService: reportService),
+            );
+          case AppRoutes.reportDetails:
+            final report = settings.arguments as ReportMetadata;
+            return MaterialPageRoute(
+              builder: (_) => ReportDetailsScreen(report: report, reportService: reportService),
+            );
+          case AppRoutes.localStorageManagement:
+            return MaterialPageRoute(
+              builder: (_) => LocalStorageManagementScreen(
+                patientService: patientService,
+                sessionService: sessionService,
+                reportService: reportService,
+              ),
             );
           default:
             return MaterialPageRoute(

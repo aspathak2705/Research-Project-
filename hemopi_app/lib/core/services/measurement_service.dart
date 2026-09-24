@@ -33,10 +33,13 @@ class HttpMeasurementService implements MeasurementService {
     return MeasurementSession(
       sessionId: res['session_id'],
       patientId: res['patient_id'],
-      timestamp: DateTime.parse(res['timestamp']),
-      status: ResearchSessionStatus.pending,
-      rawSampleCount: res['sample_count'] ?? 0,
-      csvPath: null,
+      createdAt: DateTime.parse(res['timestamp']),
+      status: SessionStatus.created,
+      sensorReadinessState: 'GATED_PENDING_PHASE_3_4',
+      attemptedSamples: res['sample_count'] ?? 0,
+      validSamples: res['valid_count'] ?? 0,
+      rejectedSamples: res['rejected_count'] ?? 0,
+      validationStatus: 'ACQUISITION_NOT_READY',
     );
   }
 

@@ -3,17 +3,20 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/models/device_info.dart';
 import '../../../core/services/device_service.dart';
 import '../../../core/services/patient_service.dart';
+import '../../../core/services/report_service.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../../app/routes.dart';
 
 class DashboardScreen extends StatefulWidget {
   final DeviceService deviceService;
   final PatientService patientService;
+  final ReportService reportService;
 
   const DashboardScreen({
     super.key,
     required this.deviceService,
     required this.patientService,
+    required this.reportService,
   });
 
   @override
@@ -32,12 +35,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: const Text(AppConstants.appName),
         actions: [
           IconButton(
+            icon: const Icon(Icons.storage_outlined),
+            tooltip: 'Local Storage Management',
+            onPressed: () => Navigator.pushNamed(context, AppRoutes.localStorageManagement),
+          ),
+          IconButton(
             icon: const Icon(Icons.info_outline),
             onPressed: () {
               showAboutDialog(
                 context: context,
                 applicationName: AppConstants.appName,
-                applicationVersion: '1.0.0 (Phase 1)',
+                applicationVersion: '2.1.0 (Android Local Storage)',
                 children: [
                   const SizedBox(height: 12),
                   const Text(AppConstants.researchNotice),
@@ -92,7 +100,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               info.deviceName,
                               style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                             ),
-                            const StatusBadge(label: 'Connected', type: BadgeType.connected),
+                            StatusBadge(
+                              label: info.isConnected ? 'Connected' : 'Disconnected',
+                              type: info.isConnected ? BadgeType.connected : BadgeType.error,
+                            ),
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -137,7 +148,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Configure patient and session parameters for optical sensor acquisition.',
+                      'Configure subject parameters and launch hardware acquisition sequence.',
                       style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
                     const SizedBox(height: 16),
@@ -170,12 +181,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           children: [
                             Icon(Icons.people_outline, size: 32, color: theme.colorScheme.primary),
                             const SizedBox(height: 8),
-                            const Text('Patients', style: TextStyle(fontWeight: FontWeight.bold)),
+                            const Text('Subjects', style: TextStyle(fontWeight: FontWeight.bold)),
                             const SizedBox(height: 4),
                             ValueListenableBuilder(
                               valueListenable: widget.patientService.patientsNotifier,
                               builder: (context, patients, _) => Text(
-                                '${patients.length} Registered',
+                                '${patients.length} Local Records',
                                 style: theme.textTheme.bodySmall,
                               ),
                             ),
@@ -189,17 +200,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Expanded(
                   child: Card(
                     child: InkWell(
-                      onTap: () => Navigator.pushNamed(context, AppRoutes.sessionHistory),
+                      onTap: () => Navigator.pushNamed(context, AppRoutes.recentReports),
                       borderRadius: BorderRadius.circular(12),
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: Column(
                           children: [
-                            Icon(Icons.history, size: 32, color: theme.colorScheme.primary),
+                            Icon(Icons.assessment_outlined, size: 32, color: theme.colorScheme.primary),
                             const SizedBox(height: 8),
-                            const Text('Sessions', style: TextStyle(fontWeight: FontWeight.bold)),
+                            const Text('Reports', style: TextStyle(fontWeight: FontWeight.bold)),
                             const SizedBox(height: 4),
-                            Text('History', style: theme.textTheme.bodySmall),
+                            ValueListenableBuilder(
+                              valueListenable: widget.reportService.reportsNotifier,
+                              builder: (context, reports, _) => Text(
+                                '${reports.length} Generated',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -210,14 +227,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Diagnostics Card
+            // Secondary Quick Actions Card
             Card(
-              child: ListTile(
-                leading: Icon(Icons.bug_report_outlined, color: theme.colorScheme.secondary),
-                title: const Text('Diagnostics & Rejection Logs'),
-                subtitle: const Text('Inspect raw diagnostic streams and rejection codes'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.pushNamed(context, AppRoutes.diagnostics),
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: Icon(Icons.history, color: theme.colorScheme.primary),
+                    title: const Text('All Session History'),
+                    subtitle: const Text('View past local acquisition session logs'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.pushNamed(context, AppRoutes.sessionHistory),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: Icon(Icons.folder_open_outlined, color: theme.colorScheme.primary),
+                    title: const Text('Report History & Export'),
+                    subtitle: const Text('Search and export generated research reports'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.pushNamed(context, AppRoutes.reportHistory),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: Icon(Icons.bug_report_outlined, color: theme.colorScheme.secondary),
+                    title: const Text('Diagnostics & Hardware Status'),
+                    subtitle: const Text('Inspect I2C bus metrics and rejection logs'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.pushNamed(context, AppRoutes.diagnostics),
+                  ),
+                ],
               ),
             ),
           ],
@@ -228,13 +265,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onDestinationSelected: (index) {
           setState(() => _currentIndex = index);
           if (index == 1) Navigator.pushNamed(context, AppRoutes.patientList);
-          if (index == 2) Navigator.pushNamed(context, AppRoutes.sessionHistory);
+          if (index == 2) Navigator.pushNamed(context, AppRoutes.recentReports);
           if (index == 3) Navigator.pushNamed(context, AppRoutes.deviceStatus);
         },
         destinations: const [
           NavigationDestination(icon: Icon(Icons.dashboard_outlined), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.people_outline), label: 'Patients'),
-          NavigationDestination(icon: Icon(Icons.history), label: 'Sessions'),
+          NavigationDestination(icon: Icon(Icons.people_outline), label: 'Subjects'),
+          NavigationDestination(icon: Icon(Icons.assessment_outlined), label: 'Reports'),
           NavigationDestination(icon: Icon(Icons.settings_remote_outlined), label: 'Device'),
         ],
       ),

@@ -7,6 +7,7 @@ import 'core/services/patient_service.dart';
 import 'core/services/measurement_service.dart';
 import 'core/services/session_service.dart';
 import 'core/services/diagnostics_service.dart';
+import 'core/services/report_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,10 +16,11 @@ void main() {
 
   final deviceService = HttpDeviceService(client: apiClient);
   final wifiService = HttpWifiService(client: apiClient);
-  final patientService = HttpPatientService(client: apiClient);
+  final patientService = AndroidLocalPatientService();
   final measurementService = HttpMeasurementService(client: apiClient);
-  final sessionService = HttpSessionService(client: apiClient);
+  final sessionService = AndroidLocalSessionService();
   final diagnosticsService = HttpDiagnosticsService(client: apiClient);
+  final reportService = AndroidLocalReportService();
 
   runApp(HemoPiApp(
     deviceService: deviceService,
@@ -27,5 +29,6 @@ void main() {
     measurementService: measurementService,
     sessionService: sessionService,
     diagnosticsService: diagnosticsService,
+    reportService: reportService,
   ));
 }

@@ -103,7 +103,7 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
                             ),
                             title: Text('Session: ${session.sessionId}', style: const TextStyle(fontWeight: FontWeight.bold)),
                             subtitle: Text(
-                              'Subject: ${session.patientId} | ${session.timestamp.toIso8601String().substring(0, 10)}\nSamples: ${session.rawSampleCount}',
+                              'Subject: ${session.patientId} | ${session.createdAt.toIso8601String().substring(0, 10)}\nSamples: ${session.attemptedSamples} (Valid: ${session.validSamples})',
                             ),
                             trailing: const Icon(Icons.chevron_right),
                             onTap: () {

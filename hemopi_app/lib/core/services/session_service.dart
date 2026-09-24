@@ -1,41 +1,39 @@
 import 'package:flutter/foundation.dart';
 import '../models/measurement_session.dart';
-import '../network/api_client.dart';
+import '../storage/local_database_service.dart';
 
 abstract class SessionService {
   ValueListenable<List<MeasurementSession>> get sessionsNotifier;
-  Future<List<MeasurementSession>> getSessions();
+  Future<List<MeasurementSession>> getSessions({String? patientId});
+  Future<MeasurementSession?> getSession(String sessionId);
+  Future<void> saveSession(MeasurementSession session);
 }
 
-class HttpSessionService implements SessionService {
-  final ApiClient apiClient;
+class AndroidLocalSessionService implements SessionService {
+  final LocalDatabaseService dbService;
   final ValueNotifier<List<MeasurementSession>> _sessions = ValueNotifier([]);
 
-  HttpSessionService({ApiClient? client}) : apiClient = client ?? ApiClient();
+  AndroidLocalSessionService({LocalDatabaseService? db})
+      : dbService = db ?? LocalDatabaseService();
 
   @override
   ValueListenable<List<MeasurementSession>> get sessionsNotifier => _sessions;
 
   @override
-  Future<List<MeasurementSession>> getSessions() async {
-    try {
-      final res = await apiClient.get('/api/sessions');
-      if (res != null && res['sessions'] is List) {
-        final List list = res['sessions'];
-        final parsed = list.map((s) {
-          return MeasurementSession(
-            sessionId: s['session_id'],
-            patientId: s['patient_id'],
-            timestamp: DateTime.parse(s['timestamp']),
-            status: ResearchSessionStatus.accepted,
-            rawSampleCount: s['sample_count'] ?? 0,
-            csvPath: null,
-          );
-        }).toList();
-        _sessions.value = parsed;
-        return parsed;
-      }
-    } catch (_) {}
-    return _sessions.value;
+  Future<List<MeasurementSession>> getSessions({String? patientId}) async {
+    final list = await dbService.getSessions(patientId: patientId);
+    _sessions.value = list;
+    return list;
+  }
+
+  @override
+  Future<MeasurementSession?> getSession(String sessionId) async {
+    return await dbService.getSession(sessionId);
+  }
+
+  @override
+  Future<void> saveSession(MeasurementSession session) async {
+    await dbService.insertSession(session);
+    await getSessions();
   }
 }
