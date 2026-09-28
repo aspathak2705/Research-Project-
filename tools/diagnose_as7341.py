@@ -92,7 +92,31 @@ def main():
         print(f"[FAIL] Driver initialization failed: {exc}")
         sys.exit(1)
 
-    # Step 5: Execute Physical Measurement Loop
+    # Step 5: AS7341 SMUX RAM 20-Byte Write / Readback Verification
+    print("\n------------------------------------------------------------")
+    print("      AS7341 SMUX RAM WRITE / READBACK VERIFICATION         ")
+    print("------------------------------------------------------------")
+    for bank_name, bank_config in [("Bank 1 (F1-F4, Clear, NIR)", AS7341Sensor._SMUX_BANK_1),
+                                   ("Bank 2 (F5-F8, Clear, NIR)", AS7341Sensor._SMUX_BANK_2)]:
+        print(f"\n--- Testing {bank_name} ---")
+        try:
+            success, mismatches = sensor.write_smux_ram(bank_config, verify_readback=True)
+            for addr in range(0x14):
+                expected = bank_config[addr]
+                if addr in mismatches:
+                    _, actual = mismatches[addr]
+                    print(f"  0x{addr:02X} expected=0x{expected:02X} actual=0x{actual:02X} [FAIL]")
+                else:
+                    print(f"  0x{addr:02X} expected=0x{expected:02X} actual=0x{expected:02X} [PASS]")
+
+            if success:
+                print(f"RESULT: {bank_name} SMUX RAM READBACK: PASS")
+            else:
+                print(f"RESULT: {bank_name} SMUX RAM READBACK: FAIL (Mismatches: {len(mismatches)})")
+        except Exception as exc:
+            print(f"[FAIL] SMUX RAM write/readback exception for {bank_name}: {exc}")
+
+    # Step 6: Execute Physical Measurement Loop
     print("\n------------------------------------------------------------")
     print(f"Executing {args.samples} Physical Measurement Cycles...")
     print("------------------------------------------------------------")
@@ -108,9 +132,15 @@ def main():
             print(f"SMUX Complete Flag     : {sample.smux_complete}")
             print(f"AVALID Integration Flag: {sample.measurement_complete}")
             print(f"Saturated Flag         : {sample.saturated}")
-            print("Interpreted Spectral Channel Values (ADC Counts):")
-            for ch, val in sample.channels.items():
-                print(f"  Channel {ch} nm : {val:5d} ADC counts")
+            print(f"Diagnostic STATUS5     : 0x{getattr(sensor, '_last_status5', 0x00):02X}")
+            print("RAW ADC DATA (Bank 2 Last Sample / Channels):")
+            ch_keys = ["415", "445", "480", "515", "555", "590", "630", "680"]
+            print(f"  Raw CH0-CH3 (Bank 1): {sample.channels.get('415', 0)}, {sample.channels.get('445', 0)}, {sample.channels.get('480', 0)}, {sample.channels.get('515', 0)}")
+            print(f"  Raw CH0-CH3 (Bank 2): {sample.channels.get('555', 0)}, {sample.channels.get('590', 0)}, {sample.channels.get('630', 0)}, {sample.channels.get('680', 0)}")
+
+            print("INTERPRETED SPECTRAL CHANNELS (ADC Counts):")
+            for ch in ch_keys:
+                print(f"  Channel {ch} nm : {sample.channels[ch]:5d} ADC counts")
 
         except Exception as exc:
             print(f"[FAIL] Measurement failed during cycle {i}: {exc}")

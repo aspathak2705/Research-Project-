@@ -114,6 +114,7 @@ class AS7341Sensor:
         self._smbus = None if shared_bus is None else shared_bus.smbus_bus
         self._last_smux_complete = True
         self._last_avalid = True
+        self._last_status5 = 0x00
 
         # Class invariant validation
         assert set(self._SMUX_BANK_1.keys()) == set(range(0x14)), "Bank 1 SMUX configuration incomplete"
@@ -182,32 +183,71 @@ class AS7341Sensor:
             except Exception as exc:
                 LOGGER.warning("Failed to reset AS7341 on close: %s", exc)
 
+    def write_smux_ram(self, smux_config: dict[int, int], verify_readback: bool = True) -> tuple[bool, dict[int, tuple[int, int]]]:
+        """
+        Write 20-byte SMUX RAM configuration with optional readback verification.
+        Returns (success, mismatches_dict) where mismatches_dict maps addr -> (expected, actual).
+        """
+        if self._smbus is None:
+            raise HardwareError("AS7341 I2C bus unavailable.")
+
+        # 1. Disable spectral measurement before SMUX RAM access
+        enable_val = self._read_u8(self.ENABLE)
+        self._write_u8(self.ENABLE, enable_val & ~0x02)  # Clear SP_EN (bit 1)
+
+        # 2. Enable SMUX RAM access via CFG0 (bit 4: REG_BANK = 1) using read-modify-write
+        cfg0_val = self._read_u8(self.CFG0)
+        self._write_u8(self.CFG0, cfg0_val | 0x10)
+
+        # 3. Write all 20 SMUX RAM configuration registers (0x00..0x13)
+        for register, value in smux_config.items():
+            self._write_u8(register, value)
+
+        mismatches: dict[int, tuple[int, int]] = {}
+        if verify_readback:
+            for register, expected in smux_config.items():
+                actual = self._read_u8(register)
+                if actual != expected:
+                    mismatches[register] = (expected, actual)
+
+        return (len(mismatches) == 0, mismatches)
+
     def _read_bank(self, smux_config: dict[int, int]) -> tuple[int, int, int, int, int, int]:
         if self._smbus is None:
             raise HardwareError("AS7341 I2C bus unavailable.")
-        
-        # 1. Disable spectral measurement before SMUX RAM config
-        enable_val = self._read_u8(self.ENABLE)
-        self._write_u8(self.ENABLE, enable_val & ~0x02)  # Clear SP_EN (bit 1)
-        
-        # 2. Enable SMUX RAM access via CFG0 (bit 4: REG_BANK = 1)
-        cfg0_val = self._read_u8(self.CFG0)
-        self._write_u8(self.CFG0, cfg0_val | 0x10)
-        
-        # Write complete 20-byte SMUX RAM configuration (0x00..0x13)
-        for register, value in smux_config.items():
-            self._write_u8(register, value)
-        
-        # 3. Execute SMUX command: Write CFG6 (0xAF) bits [4:3] = 0x10 (Execute SMUX)
+
+        # Write SMUX RAM configuration with readback verification
+        success, mismatches = self.write_smux_ram(smux_config, verify_readback=True)
+        if not success:
+            raise HardwareError(f"AS7341 SMUX RAM readback mismatch: {mismatches}")
+
+        # 4. Execute SMUX command: Write CFG6 (0xAF) bits [4:3] = 0x10 (Execute SMUX)
         self._write_u8(self.CFG6, 0x10)
-        
-        # 4. Enable SMUX calculation & spectral integration engine: PON (bit 0), SP_EN (bit 1), SMUXEN (bit 4)
-        self._write_u8(self.ENABLE, 0x13)
 
-        # Wait / poll SMUX completion bit (STATUS5 bit 2: SINT_SMUX)
+        # 5. Enable SMUX calculation engine: set SMUXEN (bit 4) and PON (bit 0)
+        enable_val = self._read_u8(self.ENABLE)
+        self._write_u8(self.ENABLE, (enable_val | 0x11) & ~0x02)
+
+        # 6. Wait / poll SMUX completion: ENABLE bit 4 (SMUXEN) clearing to 0
         self._last_smux_complete = self._wait_smux_complete()
+        if not self._last_smux_complete:
+            raise HardwareError("AS7341 SMUX execution timed out (SMUXEN remained 1).")
 
-        # Wait / poll AVALID bit (STATUS2 bit 6) for spectral integration completion
+        # Capture diagnostic STATUS5 / SINT_SMUX state
+        try:
+            self._last_status5 = self._read_u8(self.STATUS5)
+        except Exception:
+            self._last_status5 = 0x00
+
+        # 7. Restore normal register bank access: clear CFG0 bit 4 (REG_BANK = 0)
+        cfg0_val = self._read_u8(self.CFG0)
+        self._write_u8(self.CFG0, cfg0_val & ~0x10)
+
+        # 8. Re-enable spectral measurement: set SP_EN (bit 1) and PON (bit 0)
+        enable_val = self._read_u8(self.ENABLE)
+        self._write_u8(self.ENABLE, enable_val | 0x03)
+
+        # 9. Wait / poll AVALID bit (STATUS2 bit 6) for spectral integration completion
         self._last_avalid = self._wait_avalid()
 
         try:
@@ -216,18 +256,22 @@ class AS7341Sensor:
             raise HardwareError("AS7341 read bank failed.") from exc
         return tuple(raw[index] | (raw[index + 1] << 8) for index in range(0, 12, 2))
 
-    def _wait_smux_complete(self, max_retries: int = 20) -> bool:
+    def _wait_smux_complete(self, max_retries: int = 50) -> bool:
+        """
+        Polls ENABLE register bit 4 (SMUXEN) until it automatically clears to 0 upon SMUX completion.
+        Preserves strict timeout and propagates hardware I2C errors.
+        """
         for _ in range(max_retries):
             try:
-                status5 = self._read_u8(self.STATUS5)
-                if status5 & 0x04:
+                enable_val = self._read_u8(self.ENABLE)
+                if not (enable_val & 0x10):  # Bit 4 (SMUXEN) cleared to 0
                     return True
             except HardwareError:
-                raise  # Re-raise hardware error rather than masking I2C read failure
+                raise
             except Exception:
                 pass
-            time.sleep(0.005)
-        return False  # Strict failure: return False if SMUX completion bit (STATUS5 bit 2) not observed
+            time.sleep(0.001)
+        return False
 
     def _wait_avalid(self, max_retries: int = 30) -> bool:
         sleep_interval = max(self.integration_time_ms / 1000.0 / 5.0, 0.005)
@@ -237,7 +281,7 @@ class AS7341Sensor:
                 if status2 & 0x40:  # AVALID bit 6
                     return True
             except HardwareError:
-                raise  # Re-raise hardware error rather than masking I2C read failure
+                raise
             except Exception:
                 pass
             time.sleep(sleep_interval)
