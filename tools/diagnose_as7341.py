@@ -67,15 +67,19 @@ def main():
     except Exception as exc:
         print(f"[WARNING] Bus scan exception: {exc}")
 
-    # Step 3: Read Hardware ID Registers
+    # Step 3: Read Hardware Identification & Status Registers
     try:
+        aux_id = smbus.read_byte_data(0x39, 0x90)
+        rev_id = smbus.read_byte_data(0x39, 0x91)
         id_reg = smbus.read_byte_data(0x39, 0x92)
-        aux_id = smbus.read_byte_data(0x39, 0x93)
-        rev_id = smbus.read_byte_data(0x39, 0x94)
-        print(f"Hardware Identification Registers:")
-        print(f"  ID (0x92)     : 0x{id_reg:02X} (Expected: 0x24)")
-        print(f"  AUX_ID (0x93) : 0x{aux_id:02X} (Expected: 0x08)")
-        print(f"  REVID (0x94)  : 0x{rev_id:02X} (Expected: 0x05)")
+        status = smbus.read_byte_data(0x39, 0x93)
+        astatus = smbus.read_byte_data(0x39, 0x94)
+        print(f"Hardware Identification & Status Registers:")
+        print(f"  AUXID (0x90)   : 0x{aux_id:02X}")
+        print(f"  REVID (0x91)   : 0x{rev_id:02X}")
+        print(f"  ID (0x92)      : 0x{id_reg:02X} (Expected: 0x24)")
+        print(f"  STATUS (0x93)  : 0x{status:02X}")
+        print(f"  ASTATUS (0x94) : 0x{astatus:02X}")
     except Exception as exc:
         print(f"[FAIL] Register read failed: {exc}")
 
@@ -104,7 +108,7 @@ def main():
             print(f"SMUX Complete Flag     : {sample.smux_complete}")
             print(f"AVALID Integration Flag: {sample.measurement_complete}")
             print(f"Saturated Flag         : {sample.saturated}")
-            print("Physical Channel Values (ADC Counts):")
+            print("Interpreted Spectral Channel Values (ADC Counts):")
             for ch, val in sample.channels.items():
                 print(f"  Channel {ch} nm : {val:5d} ADC counts")
 

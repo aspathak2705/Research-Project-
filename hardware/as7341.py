@@ -28,6 +28,11 @@ class AS7341Sensor:
     CFG1 = 0xAA
     STATUS2 = 0xA3
     STATUS5 = 0xA6
+    STATUS = 0x93
+    ASTATUS = 0x94
+    AUXID = 0x90
+    REVID = 0x91
+    ID = 0x92
     SMUX_CMD = 0xAF
     CH0_DATA_L = 0x95
 
@@ -125,11 +130,21 @@ class AS7341Sensor:
     def _read_bank(self, smux_config: dict[int, int]) -> tuple[int, int, int, int, int, int]:
         if self._smbus is None:
             raise HardwareError("AS7341 I2C bus unavailable.")
-        self._write_u8(self.ENABLE, 0x01)
+        
+        # 1. Disable spectral measurement before SMUX config
+        enable_val = self._read_u8(self.ENABLE)
+        self._write_u8(self.ENABLE, enable_val & ~0x02)  # Clear SP_EN (bit 1)
+        
+        # 2. Write SMUX RAM configuration registers (0x00..0x12)
+        # Set CFG0 bit 4 (SMUX_CMD) to write SMUX RAM
         self._write_u8(self.CFG0, 0x10)
         for register, value in smux_config.items():
             self._write_u8(register, value)
+        
+        # 3. Execute SMUX command: Write SMUX_CMD = 0x10 (Execute SMUX config)
         self._write_u8(self.SMUX_CMD, 0x10)
+        
+        # 4. Enable SMUX execution & spectral measurement: PON (bit 0), SP_EN (bit 1), SMUXEN (bit 4)
         self._write_u8(self.ENABLE, 0x13)
 
         # Wait / poll SMUX completion bit (STATUS5 bit 2: SINT_SMUX)
@@ -153,7 +168,7 @@ class AS7341Sensor:
             except Exception:
                 pass
             time.sleep(0.005)
-        return True  # Fallback if unreadable
+        return False  # Strict failure: do not report True if SMUX completion not confirmed
 
     def _wait_avalid(self, max_retries: int = 30) -> bool:
         sleep_interval = max(self.integration_time_ms / 1000.0 / 5.0, 0.005)

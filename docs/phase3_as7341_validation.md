@@ -1,65 +1,56 @@
-# Phase 3 — AS7341 Spectral Acquisition Correction & Physical Validation
+# Phase 3.1 — AS7341 SMUX / Register Correction & Physical Validation
 
-## 1. Failure Symptoms & Diagnostic Baseline
+## 1. Initial Failure Symptoms & Baseline Evidence
 - **Observed Hardware Behavior**:
-  - Device detected on I2C Bus 1 at `0x39`.
-  - MAX30102 PPG sensor at `0x57` operating normally.
-  - AS7341 identification registers (`0x92`=0x24, `0x93`=0x08, `0x94`=0x05) confirmed.
-  - Previous spectral acquisition attempts produced incomplete channel sets (e.g. 415nm and 555nm returning counts while 445nm, 480nm, 515nm, 590nm, 630nm, 680nm failed validation with `AS7341_MISSING_CHANNEL` / `AS7341_INVALID_CHANNEL_SET`).
+  - Device detected on I2C Bus 1 at address `0x39`.
+  - MAX30102 PPG sensor at address `0x57` operating normally.
+  - Previous physical attempts returned static or invalid spectral patterns (e.g., 415nm=1, 555nm=1, others 0).
+- **Register Map Correction**:
+  - Register `0x90`: `AUXID`
+  - Register `0x91`: `REVID`
+  - Register `0x92`: `ID` (Expected device ID: `0x24`)
+  - Register `0x93`: `STATUS`
+  - Register `0x94`: `ASTATUS`
 
 ---
 
-## 2. Hardware Environment
-- **Platform**: Raspberry Pi 4 Model B Rev 1.5
-- **OS**: Debian 13 / Trixie (aarch64)
-- **Python**: 3.13.5
-- **I2C Bus**: Bus 1 (`/dev/i2c-1`)
-- **AS7341 Address**: `0x39`
-- **MAX30102 Address**: `0x57`
+## 2. Hardware & Driver Architecture
+- **Platform**: Raspberry Pi 4 Model B Rev 1.5 (Debian 13 Trixie, Python 3.13.5, I2C bus 1)
+- **AS7341 Driver**: [hardware/as7341.py](file:///c:/Users/athar/OneDrive/Documents/projects/Research-Project-/hardware/as7341.py)
+- **Validation Engine**: [processing/as7341_validator.py](file:///c:/Users/athar/OneDrive/Documents/projects/Research-Project-/processing/as7341_validator.py)
+- **Low-Level Diagnostic Tool**: [tools/diagnose_as7341.py](file:///c:/Users/athar/OneDrive/Documents/projects/Research-Project-/tools/diagnose_as7341.py)
 
 ---
 
-## 3. Drivers & Architecture Audit
-- **AS7341 Driver**: Located at [hardware/as7341.py](file:///c:/Users/athar/OneDrive/Documents/projects/Research-Project-/hardware/as7341.py).
-- **Validation Engine**: Located at [processing/as7341_validator.py](file:///c:/Users/athar/OneDrive/Documents/projects/Research-Project-/processing/as7341_validator.py).
-- **Sensor Manager**: Located at [hardware/sensor_manager.py](file:///c:/Users/athar/OneDrive/Documents/projects/Research-Project-/hardware/sensor_manager.py).
-- **Backend Readiness**: Managed via [backend/services/device_service.py](file:///c:/Users/athar/OneDrive/Documents/projects/Research-Project-/backend/services/device_service.py).
+## 3. SMUX Configuration & Acquisition Sequence
+- **Step 1 (Disable SP_EN)**: Clear bit 1 in `ENABLE` (`0x80`) before SMUX configuration.
+- **Step 2 (RAM Config)**: Set `CFG0` bit 4 (`0x10`) and write SMUX RAM registers (`0x00`..`0x12`).
+- **Step 3 (Execute SMUX)**: Write `0x10` to `SMUX_CMD` (`0xAF`).
+- **Step 4 (Enable Engines)**: Set `ENABLE` (`0x80`) to `0x13` (PON, SP_EN, SMUXEN).
+- **Status Polling**:
+  - `STATUS5` (`0xA6` bit 2 SINT_SMUX) polled for SMUX completion (returns `False` strictly on timeout/error, no false-positive fallback).
+  - `STATUS2` (`0xA3` bit 6 AVALID) polled for spectral integration completion.
 
 ---
 
-## 4. SMUX & Register Map Findings
-- **Integration & Gain Configuration**:
-  - `ATIME` (`0x81`), `ASTEP` (`0xCA`/`0xCB`), `CFG1` (`0xAA` gain).
-- **SMUX Engine Control**:
-  - SMUX Command Register (`0xAF`): Write `0x10` to execute SMUX RAM config.
-  - `ENABLE` (`0x80`): Bit 0 (PON), Bit 1 (SP_EN), Bit 4 (SMUXEN).
-  - Status Polling: `STATUS5` (`0xA6` bit 2 SINT_SMUX) & `STATUS2` (`0xA3` bit 6 AVALID).
-
----
-
-## 5. Diagnostic Tooling
-- Implemented low-level diagnostic tool in [tools/diagnose_as7341.py](file:///c:/Users/athar/OneDrive/Documents/projects/Research-Project-/tools/diagnose_as7341.py).
-- Allows direct physical measurement debugging, register dump verification, SMUX status bit monitoring, and channel ADC count inspection on the Raspberry Pi.
-
----
-
-## 6. Verification & Readiness Status Matrix
+## 4. Verification & Readiness Matrix
 
 | Capability | Status | Evidence |
 |---|---|---|
-| I2C detection (`0x39`) | HARDWARE DETECTED | Recognized on `/dev/i2c-1` via `i2cdetect` |
-| AS7341 initialization | SOFTWARE VERIFIED | Register write sequence tested cleanly |
-| SMUX configuration | SOFTWARE VERIFIED | Bank 1 (F1-F4) & Bank 2 (F5-F8) routines mapped |
-| Low-level Diagnostic Tool | SOFTWARE VERIFIED | `tools/diagnose_as7341.py` created |
-| Bank 1 physical readings | HARDWARE DETECTED | Pending physical sensor validation on Pi hardware |
-| Bank 2 physical readings | HARDWARE DETECTED | Pending physical sensor validation on Pi hardware |
-| MAX30102 readings | HARDWARE DETECTED | PPG RED/IR operational on physical Pi |
-| Android-to-Pi integration | SOFTWARE VERIFIED | REST API endpoints gated via 409 ACQUISITION_NOT_READY |
-| Research readiness | NOT READY | Pending final physical validation of 8 spectral channels |
+| I2C Detection (`0x39`) | HARDWARE DETECTED | Recognized on `/dev/i2c-1` via `i2cdetect` |
+| AS7341 Identification | HARDWARE DETECTED | `ID` (0x92) = `0x24` verified |
+| Register Label Audit | SOFTWARE VERIFIED | Corrected in `as7341.py` & `diagnose_as7341.py` |
+| SMUX Sequence & Gating | SOFTWARE VERIFIED | Disable SP_EN -> RAM write -> SMUX_CMD -> Enable |
+| False-Positive Elimination | SOFTWARE VERIFIED | `_wait_smux_complete` returns `False` on timeout |
+| Diagnostic Tooling | SOFTWARE VERIFIED | `tools/diagnose_as7341.py` updated |
+| Unit & System Tests | SOFTWARE VERIFIED | 38 pytest passed, 9 backend unittest passed |
+| Physical Validation | INCONCLUSIVE | Pending physical optical stimulus execution on Pi |
+| Research Readiness | NOT READY | Enforced server-side via HTTP 409 ACQUISITION_NOT_READY |
 
 ---
 
-## 7. Next Steps for Hardware Deployment
-1. Run `python3 tools/diagnose_as7341.py` on the physical Raspberry Pi 4.
-2. Confirm non-zero, non-saturated physical ADC readings across all 8 channels (415 nm to 680 nm) under controlled illumination.
-3. Once physical SMUX spectral channel data is verified, update `physically_validated=True` and `research_ready=True` in `backend/services/device_service.py`.
+## 5. Next Steps
+1. Deploy updated codebase to physical Raspberry Pi.
+2. Execute `python3 tools/diagnose_as7341.py --bus 1 --samples 5`.
+3. Capture repeated physical measurements under ambient and controlled visible light stimulus.
+4. Verify non-zero, plausible ADC counts across all 8 spectral channels (415 nm to 680 nm).
