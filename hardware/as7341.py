@@ -24,10 +24,11 @@ class AS7341Sensor:
     ATIME = 0x81
     ASTEP_L = 0xCA
     ASTEP_H = 0xCB
-    CFG0 = 0xA9
-    CFG1 = 0xAA
-    STATUS2 = 0xA3
-    STATUS5 = 0xA6
+    CFG0 = 0xA9  # Bit 4: REG_BANK (set to 1 to access SMUX RAM registers at 0x00..0x13)
+    CFG1 = 0xAA  # Gain control
+    CFG6 = 0xAF  # Bits [4:3]: SMUX_CMD (write 0x10 to execute SMUX RAM config)
+    STATUS2 = 0xA3  # Bit 6: AVALID (spectral integration complete)
+    STATUS5 = 0xA6  # Bit 2: SINT_SMUX (SMUX calculation complete)
     STATUS = 0x93
     ASTATUS = 0x94
     AUXID = 0x90
@@ -52,6 +53,55 @@ class AS7341Sensor:
 
     CHANNEL_KEYS = ("415", "445", "480", "515", "555", "590", "630", "680")
 
+    # Authoritative 20-byte SMUX RAM mappings (addresses 0x00 through 0x13)
+    # Bank 1: F1 (415nm)->CH0, F2 (445nm)->CH1, F3 (480nm)->CH2, F4 (515nm)->CH3, Clear->CH4, NIR->CH5
+    _SMUX_BANK_1 = {
+        0x00: 0x30,  # CH0 left connected to F1 (PD1)
+        0x01: 0x01,  # CH0 right connected to F1 (PD1)
+        0x02: 0x00,  # CH1 left not connected
+        0x03: 0x00,  # CH1 right not connected
+        0x04: 0x00,  # CH2 left not connected
+        0x05: 0x42,  # CH1 left connected to F2 (PD2) / CH2 right connected to F2
+        0x06: 0x00,  # CH3 left not connected
+        0x07: 0x00,  # CH3 right not connected
+        0x08: 0x50,  # CH2 left connected to F3 (PD3)
+        0x09: 0x00,  # CH4 left not connected
+        0x0A: 0x00,  # CH4 right not connected
+        0x0B: 0x39,  # CH3 connected to F4 (PD4)
+        0x0C: 0x00,  # CH5 left not connected
+        0x0D: 0x00,  # CH5 right not connected
+        0x0E: 0x24,  # CH4 connected to Clear (PD_CLEAR)
+        0x0F: 0x00,  # Reserved/NC
+        0x10: 0x00,  # Reserved/NC
+        0x11: 0x00,  # CH5 left connected to NIR
+        0x12: 0x00,  # CH5 right connected to NIR
+        0x13: 0x00,  # SMUX position 19 termination
+    }
+
+    # Bank 2: F5 (555nm)->CH0, F6 (590nm)->CH1, F7 (630nm)->CH2, F8 (680nm)->CH3, Clear->CH4, NIR->CH5
+    _SMUX_BANK_2 = {
+        0x00: 0x00,  # CH0 left not connected to F1
+        0x01: 0x00,  # CH0 right not connected to F1
+        0x02: 0x00,  # CH1 left not connected
+        0x03: 0x40,  # CH0 connected to F5 (PD5)
+        0x04: 0x02,  # CH0 connected to F5 (PD5)
+        0x05: 0x00,  # CH1 left not connected to F2
+        0x06: 0x10,  # CH1 connected to F6 (PD6)
+        0x07: 0x03,  # CH1 connected to F6 (PD6)
+        0x08: 0x50,  # CH2 connected to F7 (PD7)
+        0x09: 0x00,  # CH4 left not connected
+        0x0A: 0x00,  # CH4 right not connected
+        0x0B: 0x39,  # CH3 connected to F8 (PD8)
+        0x0C: 0x00,  # CH5 left not connected
+        0x0D: 0x00,  # CH5 right not connected
+        0x0E: 0x24,  # CH4 connected to Clear (PD_CLEAR)
+        0x0F: 0x00,  # Reserved/NC
+        0x10: 0x00,  # Reserved/NC
+        0x11: 0x00,  # CH5 left connected to NIR
+        0x12: 0x00,  # CH5 right connected to NIR
+        0x13: 0x00,  # SMUX position 19 termination
+    }
+
     def __init__(
         self,
         shared_bus: I2CSharedBus | None = None,
@@ -64,6 +114,10 @@ class AS7341Sensor:
         self._smbus = None if shared_bus is None else shared_bus.smbus_bus
         self._last_smux_complete = True
         self._last_avalid = True
+
+        # Class invariant validation
+        assert set(self._SMUX_BANK_1.keys()) == set(range(0x14)), "Bank 1 SMUX configuration incomplete"
+        assert set(self._SMUX_BANK_2.keys()) == set(range(0x14)), "Bank 2 SMUX configuration incomplete"
 
     def initialize(self) -> None:
         if self._smbus is None:
@@ -82,6 +136,7 @@ class AS7341Sensor:
         if integration_time_ms <= 0:
             raise HardwareError("AS7341 integration time must be positive.")
 
+        # AS7341 Datasheet formula: t_int = (ATIME + 1) * (ASTEP + 1) * 2.78 µs
         atime = max(0, min(255, int(integration_time_ms / 2.78) - 1))
         astep = max(1, min(65534, int((integration_time_ms * 1000) / (2.78 * (atime + 1))) - 1))
         self._write_u8(self.ATIME, atime)
@@ -96,8 +151,8 @@ class AS7341Sensor:
         self._write_u8(self.CFG1, reg_value)
 
     def read_channels(self) -> dict[str, int]:
-        first_bank = self._read_bank(self._smux_config_f1_f4_clear_nir())
-        second_bank = self._read_bank(self._smux_config_f5_f8_clear_nir())
+        first_bank = self._read_bank(self._SMUX_BANK_1)
+        second_bank = self._read_bank(self._SMUX_BANK_2)
         channels = {
             "415": first_bank[0],
             "445": first_bank[1],
@@ -131,20 +186,22 @@ class AS7341Sensor:
         if self._smbus is None:
             raise HardwareError("AS7341 I2C bus unavailable.")
         
-        # 1. Disable spectral measurement before SMUX config
+        # 1. Disable spectral measurement before SMUX RAM config
         enable_val = self._read_u8(self.ENABLE)
         self._write_u8(self.ENABLE, enable_val & ~0x02)  # Clear SP_EN (bit 1)
         
-        # 2. Write SMUX RAM configuration registers (0x00..0x12)
-        # Set CFG0 bit 4 (SMUX_CMD) to write SMUX RAM
-        self._write_u8(self.CFG0, 0x10)
+        # 2. Enable SMUX RAM access via CFG0 (bit 4: REG_BANK = 1)
+        cfg0_val = self._read_u8(self.CFG0)
+        self._write_u8(self.CFG0, cfg0_val | 0x10)
+        
+        # Write complete 20-byte SMUX RAM configuration (0x00..0x13)
         for register, value in smux_config.items():
             self._write_u8(register, value)
         
-        # 3. Execute SMUX command: Write SMUX_CMD = 0x10 (Execute SMUX config)
-        self._write_u8(self.SMUX_CMD, 0x10)
+        # 3. Execute SMUX command: Write CFG6 (0xAF) bits [4:3] = 0x10 (Execute SMUX)
+        self._write_u8(self.CFG6, 0x10)
         
-        # 4. Enable SMUX execution & spectral measurement: PON (bit 0), SP_EN (bit 1), SMUXEN (bit 4)
+        # 4. Enable SMUX calculation & spectral integration engine: PON (bit 0), SP_EN (bit 1), SMUXEN (bit 4)
         self._write_u8(self.ENABLE, 0x13)
 
         # Wait / poll SMUX completion bit (STATUS5 bit 2: SINT_SMUX)
@@ -165,10 +222,12 @@ class AS7341Sensor:
                 status5 = self._read_u8(self.STATUS5)
                 if status5 & 0x04:
                     return True
+            except HardwareError:
+                raise  # Re-raise hardware error rather than masking I2C read failure
             except Exception:
                 pass
             time.sleep(0.005)
-        return False  # Strict failure: do not report True if SMUX completion not confirmed
+        return False  # Strict failure: return False if SMUX completion bit (STATUS5 bit 2) not observed
 
     def _wait_avalid(self, max_retries: int = 30) -> bool:
         sleep_interval = max(self.integration_time_ms / 1000.0 / 5.0, 0.005)
@@ -177,6 +236,8 @@ class AS7341Sensor:
                 status2 = self._read_u8(self.STATUS2)
                 if status2 & 0x40:  # AVALID bit 6
                     return True
+            except HardwareError:
+                raise  # Re-raise hardware error rather than masking I2C read failure
             except Exception:
                 pass
             time.sleep(sleep_interval)
@@ -190,60 +251,14 @@ class AS7341Sensor:
         except OSError as exc:
             raise HardwareError(f"AS7341 read failed at register 0x{register:02X}.") from exc
 
-
     def _write_u8(self, register: int, value: int) -> None:
         if self._smbus is None:
             raise HardwareError("AS7341 I2C bus unavailable.")
         try:
-            self._smbus.write_byte_data(self.ADDRESS, register, value & 0xFF)
+            self._write_byte_data_safe(register, value & 0xFF)
         except OSError as exc:
             raise HardwareError(f"AS7341 write failed at register 0x{register:02X}.") from exc
 
+    def _write_byte_data_safe(self, register: int, value: int) -> None:
+        self._smbus.write_byte_data(self.ADDRESS, register, value)
 
-    @staticmethod
-    def _smux_config_f1_f4_clear_nir() -> dict[int, int]:
-        return {
-            0x00: 0x30,
-            0x01: 0x01,
-            0x02: 0x00,
-            0x03: 0x00,
-            0x04: 0x00,
-            0x05: 0x42,
-            0x06: 0x00,
-            0x07: 0x00,
-            0x08: 0x50,
-            0x09: 0x00,
-            0x0A: 0x00,
-            0x0B: 0x39,
-            0x0C: 0x00,
-            0x0D: 0x00,
-            0x0E: 0x24,
-            0x0F: 0x00,
-            0x10: 0x00,
-            0x11: 0x00,
-            0x12: 0x00,
-        }
-
-    @staticmethod
-    def _smux_config_f5_f8_clear_nir() -> dict[int, int]:
-        return {
-            0x00: 0x00,
-            0x01: 0x00,
-            0x02: 0x00,
-            0x03: 0x40,
-            0x04: 0x02,
-            0x05: 0x00,
-            0x06: 0x10,
-            0x07: 0x03,
-            0x08: 0x50,
-            0x09: 0x00,
-            0x0A: 0x00,
-            0x0B: 0x39,
-            0x0C: 0x00,
-            0x0D: 0x00,
-            0x0E: 0x24,
-            0x0F: 0x00,
-            0x10: 0x00,
-            0x11: 0x00,
-            0x12: 0x00,
-        }
