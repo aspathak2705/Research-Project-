@@ -56,50 +56,50 @@ class AS7341Sensor:
     # Authoritative 20-byte SMUX RAM mappings (addresses 0x00 through 0x13)
     # Bank 1: F1 (415nm)->CH0, F2 (445nm)->CH1, F3 (480nm)->CH2, F4 (515nm)->CH3, Clear->CH4, NIR->CH5
     _SMUX_BANK_1 = {
-        0x00: 0x30,  # CH0 left connected to F1 (PD1)
-        0x01: 0x01,  # CH0 right connected to F1 (PD1)
-        0x02: 0x00,  # CH1 left not connected
-        0x03: 0x00,  # CH1 right not connected
-        0x04: 0x00,  # CH2 left not connected
-        0x05: 0x42,  # CH1 left connected to F2 (PD2) / CH2 right connected to F2
-        0x06: 0x00,  # CH3 left not connected
-        0x07: 0x00,  # CH3 right not connected
-        0x08: 0x50,  # CH2 left connected to F3 (PD3)
-        0x09: 0x00,  # CH4 left not connected
-        0x0A: 0x00,  # CH4 right not connected
-        0x0B: 0x39,  # CH3 connected to F4 (PD4)
-        0x0C: 0x00,  # CH5 left not connected
-        0x0D: 0x00,  # CH5 right not connected
-        0x0E: 0x24,  # CH4 connected to Clear (PD_CLEAR)
-        0x0F: 0x00,  # Reserved/NC
-        0x10: 0x00,  # Reserved/NC
-        0x11: 0x00,  # CH5 left connected to NIR
-        0x12: 0x00,  # CH5 right connected to NIR
-        0x13: 0x00,  # SMUX position 19 termination
+        0x00: 0x30,  # NC_F3L: OUT2 = ADC2 (F3L -> ADC2)
+        0x01: 0x01,  # F1L_NC: OUT1 = ADC0 (F1L -> ADC0)
+        0x02: 0x00,  # NC_NC0
+        0x03: 0x00,  # NC_F8L
+        0x04: 0x00,  # F6L_NC
+        0x05: 0x42,  # F2L_F4L: OUT1 = ADC1, OUT2 = ADC3 (F2L -> ADC1, F4L -> ADC3)
+        0x06: 0x00,  # NC_F5L
+        0x07: 0x00,  # F7L_NC
+        0x08: 0x50,  # NC_CL: OUT2 = ADC4 (Clear Left -> ADC4)
+        0x09: 0x00,  # NC_F5R
+        0x0A: 0x00,  # F7R_NC
+        0x0B: 0x00,  # NC_NC1
+        0x0C: 0x20,  # NC_F2R: OUT2 = ADC1 (F2R -> ADC1)
+        0x0D: 0x04,  # F4R_NC: OUT1 = ADC3 (F4R -> ADC3)
+        0x0E: 0x00,  # F8R_F6R
+        0x0F: 0x30,  # NC_F3R: OUT2 = ADC2 (F3R -> ADC2)
+        0x10: 0x01,  # F1R_EXT_GPIO: OUT1 = ADC0 (F1R -> ADC0)
+        0x11: 0x50,  # EXT_INT_CR: OUT2 = ADC4 (Clear Right -> ADC4)
+        0x12: 0x00,  # NC_DARK
+        0x13: 0x06,  # NIR_F: OUT1 = ADC5 (NIR -> ADC5)
     }
 
     # Bank 2: F5 (555nm)->CH0, F6 (590nm)->CH1, F7 (630nm)->CH2, F8 (680nm)->CH3, Clear->CH4, NIR->CH5
     _SMUX_BANK_2 = {
-        0x00: 0x00,  # CH0 left not connected to F1
-        0x01: 0x00,  # CH0 right not connected to F1
-        0x02: 0x00,  # CH1 left not connected
-        0x03: 0x40,  # CH0 connected to F5 (PD5)
-        0x04: 0x02,  # CH0 connected to F5 (PD5)
-        0x05: 0x00,  # CH1 left not connected to F2
-        0x06: 0x10,  # CH1 connected to F6 (PD6)
-        0x07: 0x03,  # CH1 connected to F6 (PD6)
-        0x08: 0x50,  # CH2 connected to F7 (PD7)
-        0x09: 0x00,  # CH4 left not connected
-        0x0A: 0x00,  # CH4 right not connected
-        0x0B: 0x39,  # CH3 connected to F8 (PD8)
-        0x0C: 0x00,  # CH5 left not connected
-        0x0D: 0x00,  # CH5 right not connected
-        0x0E: 0x24,  # CH4 connected to Clear (PD_CLEAR)
-        0x0F: 0x00,  # Reserved/NC
-        0x10: 0x00,  # Reserved/NC
-        0x11: 0x00,  # CH5 left connected to NIR
-        0x12: 0x00,  # CH5 right connected to NIR
-        0x13: 0x00,  # SMUX position 19 termination
+        0x00: 0x00,  # NC_F3L
+        0x01: 0x00,  # F1L_NC
+        0x02: 0x00,  # NC_NC0
+        0x03: 0x40,  # NC_F8L: OUT2 = ADC3 (F8L -> ADC3)
+        0x04: 0x02,  # F6L_NC: OUT1 = ADC1 (F6L -> ADC1)
+        0x05: 0x00,  # F2L_F4L
+        0x06: 0x10,  # NC_F5L: OUT2 = ADC0 (F5L -> ADC0)
+        0x07: 0x03,  # F7L_NC: OUT1 = ADC2 (F7L -> ADC2)
+        0x08: 0x50,  # NC_CL: OUT2 = ADC4 (Clear Left -> ADC4)
+        0x09: 0x10,  # NC_F5R: OUT2 = ADC0 (F5R -> ADC0)
+        0x0A: 0x03,  # F7R_NC: OUT1 = ADC2 (F7R -> ADC2)
+        0x0B: 0x00,  # NC_NC1
+        0x0C: 0x00,  # NC_F2R
+        0x0D: 0x00,  # F4R_NC
+        0x0E: 0x24,  # F8R_F6R: OUT1 = ADC3, OUT2 = ADC1 (F8R -> ADC3, F6R -> ADC1)
+        0x0F: 0x00,  # NC_F3R
+        0x10: 0x00,  # F1R_EXT_GPIO
+        0x11: 0x50,  # EXT_INT_CR: OUT2 = ADC4 (Clear Right -> ADC4)
+        0x12: 0x00,  # NC_DARK
+        0x13: 0x06,  # NIR_F: OUT1 = ADC5 (NIR -> ADC5)
     }
 
     def __init__(
