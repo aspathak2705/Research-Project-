@@ -154,3 +154,44 @@ class NetworkManagerService:
                 "message": str(e),
                 "ip_address": None
             }
+
+    @staticmethod
+    def get_network_status() -> dict:
+        return {
+            "hostname": NetworkManagerService.get_hostname(),
+            "ip_address": NetworkManagerService.get_ip_address(),
+            "connection_state": NetworkManagerService.get_connection_state(),
+        }
+
+    @staticmethod
+    def disconnect_wifi() -> dict:
+        try:
+            res = subprocess.run(
+                ["nmcli", "device", "disconnect", "wlan0"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if res.returncode == 0:
+                return {
+                    "status": "ok",
+                    "code": "SUCCESS",
+                    "message": "Wi-Fi disconnected successfully",
+                }
+            return {
+                "status": "error",
+                "code": "DISCONNECT_FAILED",
+                "message": res.stderr.strip() or "Failed to disconnect Wi-Fi",
+            }
+        except FileNotFoundError:
+            return {
+                "status": "error",
+                "code": "NMCLI_UNAVAILABLE",
+                "message": "NetworkManager is unavailable on host OS",
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "code": "DISCONNECT_ERROR",
+                "message": str(e),
+            }

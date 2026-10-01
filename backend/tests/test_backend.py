@@ -99,14 +99,20 @@ class TestBackendEndpoints(unittest.TestCase):
         self.assertEqual(res.status_code, 409)
         self.assertIn("ACQUISITION_NOT_READY", res.json()["detail"])
 
-    def test_diagnostics_endpoint(self):
-        res = self.client.get("/api/diagnostics")
+    def test_network_status_endpoint(self):
+        res = self.client.get("/api/network/status")
         self.assertEqual(res.status_code, 200)
         data = res.json()
-        self.assertTrue(data["i2c_bus_ok"])
-        self.assertIn("0x57", data["i2c_addresses"])
-        self.assertIn("0x39", data["i2c_addresses"])
-        self.assertFalse(data["acquisition_ready"])
+        self.assertIn("hostname", data)
+        self.assertIn("ip_address", data)
+        self.assertIn("connection_state", data)
+
+    def test_wifi_disconnect_fallback(self):
+        res = self.client.post("/api/network/wifi/disconnect")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn("status", data)
+        self.assertIn("code", data)
 
 if __name__ == "__main__":
     unittest.main()

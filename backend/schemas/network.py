@@ -21,3 +21,13 @@ class WifiConnectResponse(BaseModel):
     connection_state: str
     message: Optional[str] = None
     ip_address: Optional[str] = None
+
+class NetworkStatusResponse(BaseModel):
+    hostname: str
+    ip_address: str
+    connection_state: str
+
+class WifiDisconnectResponse(BaseModel):
+    status: str
+    code: str
+    message: Optional[str] = None

@@ -112,6 +112,29 @@ class TestAS7341SMUX(unittest.TestCase):
 
     def test_avalid_timeout_returns_false(self) -> None:
         mock_smbus = MagicMock()
+        mock_smbus.read_byte_data.return_value = 0x00  # AVALID bit 6 not set
+        self.sensor._smbus = mock_smbus
+        res = self.sensor._wait_avalid(max_retries=2)
+        self.assertFalse(res)
+
+    def test_adafruit_driver_integration(self) -> None:
+        mock_driver = MagicMock()
+        mock_driver.all_channels = (10, 20, 30, 40, 50, 60, 70, 80)
+        self.sensor._driver = mock_driver
+        channels = self.sensor.read_channels()
+        self.assertEqual(channels["415"], 10)
+        self.assertEqual(channels["445"], 20)
+        self.assertEqual(channels["480"], 30)
+        self.assertEqual(channels["515"], 40)
+        self.assertEqual(channels["555"], 50)
+        self.assertEqual(channels["590"], 60)
+        self.assertEqual(channels["630"], 70)
+        self.assertEqual(channels["680"], 80)
+
+        reading = self.sensor.read_sample()
+        self.assertFalse(reading.saturated)
+        self.assertEqual(reading.channels["415"], 10)
+
     def test_channel_byte_reconstruction_with_astatus(self) -> None:
         astatus_byte = 0x80
         spectral_bytes = [0x12, 0x03, 0x34, 0x05, 0x56, 0x07, 0x78, 0x09, 0x9A, 0x0B, 0xBC, 0x0D]
@@ -137,9 +160,7 @@ class TestAS7341SMUX(unittest.TestCase):
         self.sensor.integration_time_ms = 1.0  # short for test execution speed
 
         res = self.sensor._read_bank(AS7341Sensor._SMUX_BANK_1)
-        # Verify read block was requested from ASTATUS (0x94) with length 13
         mock_smbus.read_i2c_block_data.assert_called_with(AS7341Sensor.ADDRESS, AS7341Sensor.ASTATUS, 13)
-        # Channels: 0x0312, 0x0534, 0x0756, 0x0978, 0x0B9A, 0x0DBC
         self.assertEqual(res, (0x0312, 0x0534, 0x0756, 0x0978, 0x0B9A, 0x0DBC))
 
     def test_astatus_register_constant(self) -> None:
