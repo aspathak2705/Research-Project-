@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any
 class SensorHealthInfo(BaseModel):
     address: str
     present: bool
+    detected: Optional[bool] = None
     initialized: bool
     healthy: bool
     physically_validated: bool

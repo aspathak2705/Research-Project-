@@ -7,6 +7,7 @@ class DeviceBackendService:
         max30102_info = {
             "address": "0x57",
             "present": True,
+            "detected": True,
             "initialized": True,
             "healthy": True,
             "physically_validated": True,
@@ -18,6 +19,7 @@ class DeviceBackendService:
         as7341_info = {
             "address": "0x39",
             "present": True,
+            "detected": True,
             "initialized": True,
             "healthy": True,
             "physically_validated": False,

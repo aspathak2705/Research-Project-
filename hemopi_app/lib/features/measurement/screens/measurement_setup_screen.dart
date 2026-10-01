@@ -41,12 +41,22 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
     try {
       final status = await widget.deviceService.getSensorStatus();
       if (mounted) {
-        final ready = status.max30102Present && status.as7341Present;
+        final ready = status.max30102Present &&
+            status.as7341Present &&
+            status.as7341ResearchReady &&
+            status.as7341PhysicallyValidated;
         setState(() {
           _hardwareReady = ready;
-          _hardwareStatusText = ready
-              ? 'Physical sensors MAX30102 (0x57) and AS7341 (0x39) detected and ready.'
-              : 'Hardware Gated: ${status.max30102Present ? "" : "MAX30102 missing. "}${status.as7341Present ? "" : "AS7341 missing."} Real hardware required to proceed.';
+          if (!status.max30102Present || !status.as7341Present) {
+            _hardwareStatusText =
+                'Hardware Gated: ${status.max30102Present ? "" : "MAX30102 missing. "}${status.as7341Present ? "" : "AS7341 missing."} Real physical sensors required.';
+          } else if (!status.as7341ResearchReady || !status.as7341PhysicallyValidated) {
+            _hardwareStatusText =
+                'Hardware Gated: Physical AS7341 optical validation is pending Phase 3 root-cause resolution. Acquisition gated.';
+          } else {
+            _hardwareStatusText =
+                'Physical sensors MAX30102 (0x57) and AS7341 (0x39) validated and ready for research acquisition.';
+          }
           _isCheckingHardware = false;
         });
       }

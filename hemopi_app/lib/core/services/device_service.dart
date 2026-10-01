@@ -39,7 +39,7 @@ class HttpDeviceService implements DeviceService {
     );
     try {
       final res = await apiClient.get('/api/health');
-      if (res != null && res['api'] == 'READY') {
+      if (res != null && (res['api'] == 'READY' || res['api'] == 'ok')) {
         _deviceInfo.value = DeviceInfo(
           hostname: res['hostname'] ?? 'hemopi.local',
           deviceName: 'HemoPi Portable Analyzer',
@@ -90,14 +90,25 @@ class HttpDeviceService implements DeviceService {
       if (res != null && res['max30102'] != null && res['as7341'] != null) {
         final maxInfo = res['max30102'];
         final asInfo = res['as7341'];
+        final maxPresent = (maxInfo['present'] ?? maxInfo['detected']) ?? false;
+        final asPresent = (asInfo['present'] ?? asInfo['detected']) ?? false;
+        final maxReady = maxInfo['research_ready'] == true;
+        final asReady = asInfo['research_ready'] == true;
+        final asValidated = asInfo['physically_validated'] == true;
+
         return SensorStatus(
           sensorName: 'MAX30102 PPG',
           address: '0x57',
-          max30102Present: maxInfo['detected'] ?? false,
+          max30102Present: maxPresent,
+          max30102ResearchReady: maxReady,
           max30102Message: maxInfo['message'] ?? 'No status',
-          as7341Present: asInfo['detected'] ?? false,
+          as7341Present: asPresent,
+          as7341ResearchReady: asReady,
+          as7341PhysicallyValidated: asValidated,
           as7341Message: asInfo['message'] ?? 'No status',
-          connectionState: SensorHealthState.pendingValidation,
+          connectionState: (asReady && maxReady)
+              ? SensorHealthState.validated
+              : SensorHealthState.pendingValidation,
         );
       }
     } catch (_) {}

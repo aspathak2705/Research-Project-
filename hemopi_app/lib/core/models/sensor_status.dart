@@ -9,8 +9,11 @@ class SensorStatus {
   final String sensorName;
   final String address;
   final bool max30102Present;
+  final bool max30102ResearchReady;
   final String max30102Message;
   final bool as7341Present;
+  final bool as7341ResearchReady;
+  final bool as7341PhysicallyValidated;
   final String as7341Message;
   final SensorHealthState connectionState;
 
@@ -18,8 +21,11 @@ class SensorStatus {
     required this.sensorName,
     required this.address,
     this.max30102Present = true,
+    this.max30102ResearchReady = true,
     this.max30102Message = 'MAX30102 detected at 0x57. Pending Phase 4 Validation.',
     this.as7341Present = true,
+    this.as7341ResearchReady = false,
+    this.as7341PhysicallyValidated = false,
     this.as7341Message = 'AS7341 detected at 0x39. Pending Phase 3 Validation.',
     required this.connectionState,
   });
