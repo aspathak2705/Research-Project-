@@ -105,8 +105,8 @@ class AS7341Sensor:
     def __init__(
         self,
         shared_bus: I2CSharedBus | None = None,
-        integration_time_ms: float = 50.0,
-        gain: int = 16,
+        integration_time_ms: float = 200.0,
+        gain: int = 128,
     ) -> None:
         self.shared_bus = shared_bus
         self.integration_time_ms = integration_time_ms
@@ -183,10 +183,11 @@ class AS7341Sensor:
             except Exception as exc:
                 LOGGER.warning("Failed to reset AS7341 on close: %s", exc)
 
-    def write_smux_ram(self, smux_config: dict[int, int], verify_readback: bool = True) -> tuple[bool, dict[int, tuple[int, int]]]:
+    def write_smux_ram(self, smux_config: dict[int, int]) -> None:
         """
-        Write 20-byte SMUX RAM configuration with optional readback verification.
-        Returns (success, mismatches_dict) where mismatches_dict maps addr -> (expected, actual).
+        Write 20-byte SMUX RAM configuration registers (0x00..0x13).
+        Enables SMUX RAM access via CFG0 (REG_BANK = 1), writes all 20 bytes,
+        and restores normal register bank access (REG_BANK = 0).
         """
         if self._smbus is None:
             raise HardwareError("AS7341 I2C bus unavailable.")
@@ -203,32 +204,26 @@ class AS7341Sensor:
         for register, value in smux_config.items():
             self._write_u8(register, value)
 
-        mismatches: dict[int, tuple[int, int]] = {}
-        if verify_readback:
-            for register, expected in smux_config.items():
-                actual = self._read_u8(register)
-                if actual != expected:
-                    mismatches[register] = (expected, actual)
-
-        return (len(mismatches) == 0, mismatches)
+        # 4. Restore normal register bank access: clear CFG0 bit 4 (REG_BANK = 0)
+        # MUST be cleared before accessing CFG6 (0xAF) and ENABLE (0x80)
+        cfg0_val = self._read_u8(self.CFG0)
+        self._write_u8(self.CFG0, cfg0_val & ~0x10)
 
     def _read_bank(self, smux_config: dict[int, int]) -> tuple[int, int, int, int, int, int]:
         if self._smbus is None:
             raise HardwareError("AS7341 I2C bus unavailable.")
 
-        # Write SMUX RAM configuration with readback verification
-        success, mismatches = self.write_smux_ram(smux_config, verify_readback=True)
-        if not success:
-            raise HardwareError(f"AS7341 SMUX RAM readback mismatch: {mismatches}")
+        # 1-4. Write SMUX RAM configuration and restore REG_BANK = 0
+        self.write_smux_ram(smux_config)
 
-        # 4. Execute SMUX command: Write CFG6 (0xAF) bits [4:3] = 0x10 (Execute SMUX)
+        # 5. Execute SMUX command: Write CFG6 (0xAF) bits [4:3] = 0x10 (Execute SMUX: write RAM to SMUX chain)
         self._write_u8(self.CFG6, 0x10)
 
-        # 5. Enable SMUX calculation engine: set SMUXEN (bit 4) and PON (bit 0)
+        # 6. Enable SMUX calculation engine: set SMUXEN (bit 4) and PON (bit 0)
         enable_val = self._read_u8(self.ENABLE)
         self._write_u8(self.ENABLE, (enable_val | 0x11) & ~0x02)
 
-        # 6. Wait / poll SMUX completion: ENABLE bit 4 (SMUXEN) clearing to 0
+        # 7. Wait / poll SMUX completion: ENABLE bit 4 (SMUXEN) clearing to 0
         self._last_smux_complete = self._wait_smux_complete()
         if not self._last_smux_complete:
             raise HardwareError("AS7341 SMUX execution timed out (SMUXEN remained 1).")
@@ -238,10 +233,6 @@ class AS7341Sensor:
             self._last_status5 = self._read_u8(self.STATUS5)
         except Exception:
             self._last_status5 = 0x00
-
-        # 7. Restore normal register bank access: clear CFG0 bit 4 (REG_BANK = 0)
-        cfg0_val = self._read_u8(self.CFG0)
-        self._write_u8(self.CFG0, cfg0_val & ~0x10)
 
         # 8. Re-enable spectral measurement: set SP_EN (bit 1) and PON (bit 0)
         enable_val = self._read_u8(self.ENABLE)

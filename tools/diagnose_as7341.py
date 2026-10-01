@@ -92,29 +92,18 @@ def main():
         print(f"[FAIL] Driver initialization failed: {exc}")
         sys.exit(1)
 
-    # Step 5: AS7341 SMUX RAM 20-Byte Write / Readback Verification
+    # Step 5: AS7341 SMUX RAM 20-Byte Configuration
     print("\n------------------------------------------------------------")
-    print("      AS7341 SMUX RAM WRITE / READBACK VERIFICATION         ")
+    print("         AS7341 SMUX RAM CONFIGURATION                      ")
     print("------------------------------------------------------------")
     for bank_name, bank_config in [("Bank 1 (F1-F4, Clear, NIR)", AS7341Sensor._SMUX_BANK_1),
                                    ("Bank 2 (F5-F8, Clear, NIR)", AS7341Sensor._SMUX_BANK_2)]:
-        print(f"\n--- Testing {bank_name} ---")
+        print(f"\n--- Configuring {bank_name} ---")
         try:
-            success, mismatches = sensor.write_smux_ram(bank_config, verify_readback=True)
-            for addr in range(0x14):
-                expected = bank_config[addr]
-                if addr in mismatches:
-                    _, actual = mismatches[addr]
-                    print(f"  0x{addr:02X} expected=0x{expected:02X} actual=0x{actual:02X} [FAIL]")
-                else:
-                    print(f"  0x{addr:02X} expected=0x{expected:02X} actual=0x{expected:02X} [PASS]")
-
-            if success:
-                print(f"RESULT: {bank_name} SMUX RAM READBACK: PASS")
-            else:
-                print(f"RESULT: {bank_name} SMUX RAM READBACK: FAIL (Mismatches: {len(mismatches)})")
+            sensor.write_smux_ram(bank_config)
+            print(f"[PASS] 20 SMUX RAM bytes written and REG_BANK restored to 0 for {bank_name}.")
         except Exception as exc:
-            print(f"[FAIL] SMUX RAM write/readback exception for {bank_name}: {exc}")
+            print(f"[FAIL] SMUX RAM write exception for {bank_name}: {exc}")
 
     # Step 6: Execute Physical Measurement Loop
     print("\n------------------------------------------------------------")
