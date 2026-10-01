@@ -24,7 +24,7 @@ class MeasurementProgressScreen extends StatefulWidget {
 class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
   bool _isAcquiring = false;
   double _progress = 0.0;
-  String _statusMessage = 'Initializing physical acquisition stream...';
+  String _statusMessage = 'Connecting to HemoPi sensor hardware…';
   MeasurementSession? _completedSession;
   String? _error;
   Timer? _timer;
@@ -45,7 +45,7 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
     setState(() {
       _isAcquiring = true;
       _progress = 0.05;
-      _statusMessage = 'Communicating with HemoPi hardware acquisition daemon...';
+      _statusMessage = 'Starting optical and pulse sensor recording…';
       _error = null;
     });
 
@@ -62,7 +62,7 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
             setState(() {
               _isAcquiring = false;
               _progress = 1.0;
-              _statusMessage = 'Physical hardware measurement completed successfully.';
+              _statusMessage = 'Measurement completed successfully.';
               _completedSession = finishedSession;
             });
           }
@@ -70,17 +70,25 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
           if (mounted) {
             setState(() {
               _progress = currentProgress;
-              _statusMessage = 'Acquiring physical I2C readings (${(currentProgress * 100).toInt()}%)...';
+              _statusMessage = 'Recording physical sensor signals (${(currentProgress * 100).toInt()}%)...';
             });
           }
         }
       });
     } catch (e) {
       if (mounted) {
+        String friendlyError = 'Measurement is not available yet because required sensor validation is still pending.';
+        final errStr = e.toString().toLowerCase();
+        if (errStr.contains('timeout')) {
+          friendlyError = 'HemoPi did not respond in time. Please verify that the instrument is switched on.';
+        } else if (errStr.contains('socket') || errStr.contains('unreachable')) {
+          friendlyError = 'Cannot reach HemoPi. Check that this phone and HemoPi are on the same Wi-Fi.';
+        }
+
         setState(() {
           _isAcquiring = false;
-          _error = e.toString();
-          _statusMessage = 'Acquisition failed or aborted.';
+          _error = friendlyError;
+          _statusMessage = 'Acquisition unavailable.';
         });
       }
     }
@@ -90,76 +98,101 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Acquisition Progress'),
+        title: const Text('Measurement in Progress'),
         automaticallyImplyLeading: !_isAcquiring,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             CustomCard(
-              title: _isAcquiring ? 'Acquisition Active' : (_error != null ? 'Acquisition Error' : 'Acquisition Complete'),
-              subtitle: 'Subject ID: ${widget.patient?.patientId ?? "N/A"}',
+              title: _isAcquiring
+                  ? 'Recording in Progress'
+                  : (_error != null ? 'Acquisition Unavailable' : 'Recording Finished'),
+              subtitle: 'Subject: ${widget.patient?.patientId ?? "Unspecified"}',
+              trailing: StatusBadge(
+                label: _isAcquiring ? 'Active' : (_error != null ? 'Gated' : 'Complete'),
+                type: _isAcquiring
+                    ? BadgeType.measuring
+                    : (_error != null ? BadgeType.error : BadgeType.success),
+              ),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 16),
-                  LinearProgressIndicator(
-                    value: _progress,
-                    minHeight: 12,
-                    borderRadius: BorderRadius.circular(6),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                      value: _progress,
+                      minHeight: 10,
+                      backgroundColor: const Color(0xFFE2E8F0),
+                    ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '${(_progress * 100).toInt()}% Complete',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        '${(_progress * 100).toInt()}% Completed',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B)),
                       ),
-                      StatusBadge(
-                        label: _isAcquiring ? 'Acquiring' : (_error != null ? 'Failed' : 'Completed'),
-                        type: _isAcquiring
-                            ? BadgeType.measuring
-                            : (_error != null ? BadgeType.error : BadgeType.success),
+                      Text(
+                        _isAcquiring ? 'Keep finger steady' : 'Ready',
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Text(_statusMessage, style: const TextStyle(color: Colors.black87)),
+                  Text(_statusMessage, style: const TextStyle(color: Color(0xFF475569), fontSize: 13)),
                   if (_error != null) ...[
-                    const SizedBox(height: 12),
-                    Text(_error!, style: const TextStyle(color: Colors.red)),
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEE2E2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_rounded, color: Color(0xFFDC2626), size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _error!,
+                              style: const TextStyle(color: Color(0xFF991B1B), fontSize: 12, height: 1.35),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ],
               ),
             ),
             const SizedBox(height: 16),
             const CustomCard(
-              title: 'Phase 1 - Direct Hardware Pipeline Notice',
-              subtitle: 'Scientific Integrity Gating',
+              title: 'Study Protocol Notice',
+              subtitle: 'Zero synthetic measurement guarantee',
               child: Text(
-                'Raw data is being written strictly by the Pi hardware daemon to CSV storage. No synthetic curves or fake PPG waveforms are rendered.',
-                style: TextStyle(fontSize: 13, color: Colors.black87),
+                'HemoPi records strictly authentic optical counts and PPG pulses. Simulated readings or fabricated hemoglobin estimations are never generated.',
+                style: TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.4),
               ),
             ),
             const SizedBox(height: 24),
             if (!_isAcquiring)
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.assessment_outlined),
-                  label: const Text('View Session Results'),
-                  onPressed: _completedSession != null
-                      ? () {
-                          Navigator.pushReplacementNamed(
-                            context,
-                            AppRoutes.sessionResult,
-                            arguments: _completedSession,
-                          );
-                        }
-                      : () => Navigator.pop(context),
-                ),
+              ElevatedButton.icon(
+                icon: Icon(_completedSession != null ? Icons.assessment_rounded : Icons.arrow_back_rounded),
+                label: Text(_completedSession != null ? 'View Session Result' : 'Return to Setup'),
+                onPressed: _completedSession != null
+                    ? () {
+                        Navigator.pushReplacementNamed(
+                          context,
+                          AppRoutes.sessionResult,
+                          arguments: _completedSession,
+                        );
+                      }
+                    : () => Navigator.pop(context),
               ),
           ],
         ),

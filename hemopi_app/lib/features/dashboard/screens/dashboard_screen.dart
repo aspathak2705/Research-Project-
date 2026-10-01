@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/models/device_info.dart';
 import '../../../core/services/device_service.dart';
 import '../../../core/services/patient_service.dart';
 import '../../../core/services/report_service.dart';
 import '../../../shared/widgets/status_badge.dart';
+import '../../../shared/widgets/custom_card.dart';
 import '../../../app/routes.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -32,227 +32,257 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(AppConstants.appName),
+        title: const Text('HemoPi'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.storage_outlined),
-            tooltip: 'Local Storage Management',
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Settings & Data Storage',
             onPressed: () => Navigator.pushNamed(context, AppRoutes.localStorageManagement),
-          ),
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: () {
-              showAboutDialog(
-                context: context,
-                applicationName: AppConstants.appName,
-                applicationVersion: '2.1.0 (Android Local Storage)',
-                children: [
-                  const SizedBox(height: 12),
-                  const Text(AppConstants.researchNotice),
-                ],
-              );
-            },
           ),
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Notice banner
+            // Clinical Research Banner
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.amber.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber.shade300),
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFDE68A)),
               ),
-              child: Row(
+              child: const Row(
                 children: [
-                  Icon(Icons.science_outlined, color: Colors.amber.shade900),
-                  const SizedBox(width: 12),
+                  Icon(Icons.shield_outlined, color: Color(0xFFD97706), size: 22),
+                  SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      AppConstants.researchNotice,
-                      style: theme.textTheme.bodySmall?.copyWith(color: Colors.amber.shade900),
+                      'Research Study Protocol: Non-invasive observational evaluation.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF92400E),
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
 
-            // Device Status Card
+            // Instrument Readiness Card
             ValueListenableBuilder<DeviceInfo>(
               valueListenable: widget.deviceService.deviceInfoNotifier,
               builder: (context, info, _) {
-                return Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              info.deviceName,
-                              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                final isConnected = info.isConnected;
+                return CustomCard(
+                  title: 'HemoPi Instrument',
+                  subtitle: isConnected ? 'Connected & ready' : 'Not reachable on network',
+                  trailing: StatusBadge(
+                    label: isConnected ? 'Ready' : 'Needs Attention',
+                    type: isConnected ? BadgeType.ready : BadgeType.warning,
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            isConnected ? Icons.check_circle_outline : Icons.wifi_off_outlined,
+                            size: 18,
+                            color: isConnected ? const Color(0xFF0D8A58) : const Color(0xFFD97706),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              isConnected
+                                  ? 'Instrument connected. Sensors detected and operational.'
+                                  : 'Connect this phone and HemoPi to the same clinic network.',
+                              style: const TextStyle(fontSize: 13, color: Color(0xFF475569)),
                             ),
-                            StatusBadge(
-                              label: info.isConnected ? 'Connected' : 'Disconnected',
-                              type: info.isConnected ? BadgeType.connected : BadgeType.error,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Hostname: ${info.hostname}',
-                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                        ),
-                        const SizedBox(height: 12),
-                        OutlinedButton.icon(
-                          onPressed: () => Navigator.pushNamed(context, AppRoutes.deviceStatus),
-                          icon: const Icon(Icons.settings_remote_outlined, size: 18),
-                          label: const Text('View Device Status'),
-                        ),
-                      ],
-                    ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: () => Navigator.pushNamed(context, AppRoutes.deviceStatus),
+                        icon: const Icon(Icons.info_outline_rounded, size: 18),
+                        label: const Text('Check Sensor Health'),
+                      ),
+                    ],
                   ),
                 );
               },
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
 
-            // Start Measurement Action Card
+            // Primary Action: Start New Measurement
             Card(
-              color: theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.play_circle_outline, size: 28, color: theme.colorScheme.primary),
-                        const SizedBox(width: 12),
-                        Text(
-                          'New Measurement',
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.onPrimaryContainer,
-                          ),
+              elevation: 0,
+              color: theme.colorScheme.primary,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: InkWell(
+                onTap: () => Navigator.pushNamed(context, AppRoutes.measurementSetup),
+                borderRadius: BorderRadius.circular(16),
+                child: Padding(
+                  padding: const EdgeInsets.all(22.0),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Configure subject parameters and launch hardware acquisition sequence.',
-                      style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () => Navigator.pushNamed(context, AppRoutes.measurementSetup),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.colorScheme.primary,
-                        foregroundColor: theme.colorScheme.onPrimary,
-                        minimumSize: const Size.fromHeight(48),
+                        child: const Icon(Icons.play_arrow_rounded, size: 36, color: Colors.white),
                       ),
-                      child: const Text('Start Measurement Setup'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Quick Navigation Grid
-            Row(
-              children: [
-                Expanded(
-                  child: Card(
-                    child: InkWell(
-                      onTap: () => Navigator.pushNamed(context, AppRoutes.patientList),
-                      borderRadius: BorderRadius.circular(12),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
+                      const SizedBox(width: 18),
+                      const Expanded(
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.people_outline, size: 32, color: theme.colorScheme.primary),
-                            const SizedBox(height: 8),
-                            const Text('Subjects', style: TextStyle(fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 4),
-                            ValueListenableBuilder(
-                              valueListenable: widget.patientService.patientsNotifier,
-                              builder: (context, patients, _) => Text(
-                                '${patients.length} Local Records',
-                                style: theme.textTheme.bodySmall,
+                            Text(
+                              'New Measurement',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Select patient and start sensor recording session',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.white70,
                               ),
                             ),
                           ],
                         ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, color: Colors.white70, size: 28),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+
+            // Quick Stats Row: Patients and Reports
+            Row(
+              children: [
+                Expanded(
+                  child: CustomCard(
+                    title: 'Patients',
+                    subtitle: 'Study cohort',
+                    onTap: () => Navigator.pushNamed(context, AppRoutes.patientList),
+                    child: ValueListenableBuilder(
+                      valueListenable: widget.patientService.patientsNotifier,
+                      builder: (context, patients, _) => Row(
+                        children: [
+                          Text(
+                            '${patients.length}',
+                            style: const TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Registered',
+                            style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 14),
                 Expanded(
-                  child: Card(
-                    child: InkWell(
-                      onTap: () => Navigator.pushNamed(context, AppRoutes.recentReports),
-                      borderRadius: BorderRadius.circular(12),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          children: [
-                            Icon(Icons.assessment_outlined, size: 32, color: theme.colorScheme.primary),
-                            const SizedBox(height: 8),
-                            const Text('Reports', style: TextStyle(fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 4),
-                            ValueListenableBuilder(
-                              valueListenable: widget.reportService.reportsNotifier,
-                              builder: (context, reports, _) => Text(
-                                '${reports.length} Generated',
-                                style: theme.textTheme.bodySmall,
-                              ),
+                  child: CustomCard(
+                    title: 'Reports',
+                    subtitle: 'Recorded sessions',
+                    onTap: () => Navigator.pushNamed(context, AppRoutes.recentReports),
+                    child: ValueListenableBuilder(
+                      valueListenable: widget.reportService.reportsNotifier,
+                      builder: (context, reports, _) => Row(
+                        children: [
+                          Text(
+                            '${reports.length}',
+                            style: const TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1E293B),
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Saved',
+                            style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
 
-            // Secondary Quick Actions Card
-            Card(
+            // Navigation Links Card
+            CustomCard(
+              title: 'Clinical Workflow',
               child: Column(
                 children: [
                   ListTile(
-                    leading: Icon(Icons.history, color: theme.colorScheme.primary),
-                    title: const Text('All Session History'),
-                    subtitle: const Text('View past local acquisition session logs'),
-                    trailing: const Icon(Icons.chevron_right),
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(Icons.people_outline_rounded, color: theme.colorScheme.primary, size: 20),
+                    ),
+                    title: const Text('Manage Patients', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Register, review, and search participants', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.pushNamed(context, AppRoutes.patientList),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE0F2FE),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.history_rounded, color: Color(0xFF0284C7), size: 20),
+                    ),
+                    title: const Text('Previous Sessions', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Timeline of past measurement sessions', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => Navigator.pushNamed(context, AppRoutes.sessionHistory),
                   ),
                   const Divider(height: 1),
                   ListTile(
-                    leading: Icon(Icons.folder_open_outlined, color: theme.colorScheme.primary),
-                    title: const Text('Report History & Export'),
-                    subtitle: const Text('Search and export generated research reports'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.pushNamed(context, AppRoutes.reportHistory),
-                  ),
-                  const Divider(height: 1),
-                  ListTile(
-                    leading: Icon(Icons.bug_report_outlined, color: theme.colorScheme.secondary),
-                    title: const Text('Diagnostics & Hardware Status'),
-                    subtitle: const Text('Inspect I2C bus metrics and rejection logs'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.pushNamed(context, AppRoutes.diagnostics),
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.settings_outlined, color: Color(0xFF475569), size: 20),
+                    ),
+                    title: const Text('Settings & Data Export', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Review offline storage and backup files', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.pushNamed(context, AppRoutes.localStorageManagement),
                   ),
                 ],
               ),
@@ -269,10 +299,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (index == 3) Navigator.pushNamed(context, AppRoutes.deviceStatus);
         },
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.dashboard_outlined), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.people_outline), label: 'Subjects'),
-          NavigationDestination(icon: Icon(Icons.assessment_outlined), label: 'Reports'),
-          NavigationDestination(icon: Icon(Icons.settings_remote_outlined), label: 'Device'),
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: 'Home',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.people_outline),
+            selectedIcon: Icon(Icons.people_rounded),
+            label: 'Patients',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.assessment_outlined),
+            selectedIcon: Icon(Icons.assessment_rounded),
+            label: 'Reports',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.sensors_outlined),
+            selectedIcon: Icon(Icons.sensors_rounded),
+            label: 'Instrument',
+          ),
         ],
       ),
     );

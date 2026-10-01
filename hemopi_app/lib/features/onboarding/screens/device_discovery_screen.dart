@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/models/device_info.dart';
 import '../../../core/services/device_service.dart';
 import '../../../shared/widgets/status_badge.dart';
@@ -31,41 +30,34 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
     }
   }
 
-  void _showManualIpDialog() {
-    final controller = TextEditingController(text: widget.deviceService.baseUrl);
+  void _showHelpDialog() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('HemoPi Address / IP Fallback'),
-        content: Column(
+        title: const Text('Connecting to HemoPi'),
+        content: const Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Enter the HemoPi mDNS address or direct IP if mDNS is unavailable on this network:',
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'e.g. 192.168.1.100 or hemopi.local',
-                labelText: 'Host or IP URL',
-              ),
+            Text(
+              '1. Power on your HemoPi instrument using its official power adapter.\n\n'
+              '2. Confirm this phone is connected to the same clinic or laboratory Wi-Fi network.\n\n'
+              '3. If your clinic uses an enterprise network with device isolation, contact your technician or use Advanced Device Setup.',
+              style: TextStyle(height: 1.4),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: const Text('Close'),
           ),
-          ElevatedButton(
+          TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              _startDiscovery(hostOrIp: controller.text);
+              Navigator.pushNamed(context, AppRoutes.diagnostics);
             },
-            child: const Text('Connect'),
+            child: const Text('Technician Setup'),
           ),
         ],
       ),
@@ -78,117 +70,157 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Connect to HemoPi'),
+        title: const Text('HemoPi Instrument'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline_rounded),
+            tooltip: 'Connection Help',
+            onPressed: _showHelpDialog,
+          ),
+          IconButton(
+            icon: const Icon(Icons.build_circle_outlined),
+            tooltip: 'Technician Settings',
+            onPressed: () => Navigator.pushNamed(context, AppRoutes.diagnostics),
+          ),
+        ],
       ),
       body: ValueListenableBuilder<DeviceInfo>(
         valueListenable: widget.deviceService.deviceInfoNotifier,
         builder: (context, deviceInfo, _) {
           final isConnected = deviceInfo.connectionStatus == ConnectionStateStatus.connected;
 
-          return Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 16),
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
-                      shape: BoxShape.circle,
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 12),
+                  Center(
+                    child: Container(
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        color: isConnected
+                            ? const Color(0xFFE8F5E9)
+                            : (_isSearching ? theme.colorScheme.primaryContainer : const Color(0xFFF1F5F9)),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isConnected
+                            ? Icons.check_circle_rounded
+                            : (_isSearching ? Icons.sync_rounded : Icons.sensors_rounded),
+                        size: 52,
+                        color: isConnected
+                            ? const Color(0xFF0D8A58)
+                            : (_isSearching ? theme.colorScheme.primary : const Color(0xFF64748B)),
+                      ),
                     ),
-                    child: Icon(
-                      Icons.router_outlined,
-                      size: 64,
-                      color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Welcome to HemoPi',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF1E293B),
                     ),
+                    textAlign: TextAlign.center,
                   ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  AppConstants.appName,
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.onSurface,
+                  const SizedBox(height: 6),
+                  Text(
+                    'Portable research instrument for hemoglobin and non-invasive optical sensor analysis.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: const Color(0xFF64748B),
+                      height: 1.4,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
-                ),
-                Text(
-                  AppConstants.appTagline,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 32),
+                  const SizedBox(height: 32),
 
-                // Discovery status card
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              deviceInfo.deviceName,
-                              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                  // Connection status card
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Instrument Status',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: Color(0xFF1E293B),
+                                ),
+                              ),
+                              StatusBadge(
+                                label: isConnected
+                                    ? 'Connected'
+                                    : (_isSearching ? 'Searching…' : 'Not Connected'),
+                                type: isConnected
+                                    ? BadgeType.connected
+                                    : (_isSearching ? BadgeType.validating : BadgeType.error),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            _isSearching
+                                ? 'Searching for your HemoPi on the clinic network…'
+                                : (isConnected
+                                    ? 'HemoPi instrument found and ready to connect.'
+                                    : 'HemoPi isn’t connected. Ensure the device is powered on and sharing the same Wi-Fi network.'),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: Color(0xFF475569),
+                              height: 1.4,
                             ),
-                            StatusBadge(
-                              label: isConnected ? 'Available' : (_isSearching ? 'Searching' : 'Not Found'),
-                              type: isConnected
-                                  ? BadgeType.ready
-                                  : (_isSearching ? BadgeType.validating : BadgeType.notReady),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const Spacer(),
+
+                  if (_isSearching)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24.0),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 12),
+                            Text(
+                              'Finding your HemoPi…',
+                              style: TextStyle(color: Color(0xFF64748B), fontSize: 14),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Hostname: ${deviceInfo.hostname}',
-                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          _isSearching
-                              ? 'Searching for device on local network...'
-                              : (isConnected
-                                  ? 'Device discovered via local network resolution.'
-                                  : 'Device not found on local network.'),
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                      ],
+                      ),
+                    )
+                  else ...[
+                    ElevatedButton(
+                      onPressed: isConnected
+                          ? () => Navigator.pushNamedAndRemoveUntil(
+                                context,
+                                AppRoutes.dashboard,
+                                (route) => false,
+                              )
+                          : () => _startDiscovery(),
+                      child: Text(isConnected ? 'Enter Home' : 'Connect to HemoPi'),
                     ),
-                  ),
-                ),
-
-                const Spacer(),
-
-                if (_isSearching)
-                  const Center(child: CircularProgressIndicator())
-                else ...[
-                  ElevatedButton(
-                    onPressed: isConnected
-                        ? () => Navigator.pushNamed(context, AppRoutes.wifiSetup)
-                        : _startDiscovery,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.all(16),
-                      backgroundColor: theme.colorScheme.primary,
-                      foregroundColor: theme.colorScheme.onPrimary,
+                    const SizedBox(height: 10),
+                    OutlinedButton(
+                      onPressed: _showHelpDialog,
+                      child: const Text('Need Help Connecting?'),
                     ),
-                    child: Text(isConnected ? 'Connect to Device' : 'Retry Discovery'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    onPressed: _showManualIpDialog,
-                    icon: const Icon(Icons.settings_ethernet),
-                    label: const Text('Configure IP / Host Fallback'),
-                  ),
+                  ],
+                  const SizedBox(height: 12),
                 ],
-                const SizedBox(height: 16),
-              ],
+              ),
             ),
           );
         },

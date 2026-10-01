@@ -19,70 +19,73 @@ class SessionResultScreen extends StatelessWidget {
         title: const Text('Session Result'),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             CustomCard(
               title: 'Acquisition Summary',
-              subtitle: 'Session ID: ${session.sessionId}',
+              subtitle: 'Recorded Session Identifier: ${session.sessionId}',
+              trailing: StatusBadge(
+                label: session.status.name.toUpperCase(),
+                type: session.validSamples > 0 ? BadgeType.success : BadgeType.info,
+              ),
               child: Column(
                 children: [
-                  _buildRow('Subject ID', session.patientId),
-                  _buildRow('Timestamp', session.createdAt.toIso8601String().replaceAll('T', ' ').substring(0, 19)),
-                  _buildRow('Status', session.status.name.toUpperCase()),
-                  _buildRow('Attempted Samples', '${session.attemptedSamples} samples'),
-                  _buildRow('Valid Samples', '${session.validSamples} samples'),
-                  _buildRow('CSV File Saved', session.localValidCsvFile ?? 'Pending save'),
+                  _buildRow('Subject Identifier', session.patientId),
+                  const Divider(height: 16),
+                  _buildRow('Recorded Date & Time', session.createdAt.toIso8601String().replaceAll('T', ' ').substring(0, 19)),
+                  const Divider(height: 16),
+                  _buildRow('Total Samples Attempted', '${session.attemptedSamples}'),
+                  const Divider(height: 16),
+                  _buildRow('Valid Sensor Readings', '${session.validSamples}'),
+                  const Divider(height: 16),
+                  _buildRow('Offline CSV Saved', session.localValidCsvFile != null ? 'Saved locally' : 'Gated'),
                 ],
               ),
             ),
             const SizedBox(height: 16),
+
             const CustomCard(
-              title: 'Hemoglobin Prediction Status',
-              subtitle: 'Phase 1 - Scientific Honesty Gating',
+              title: 'Clinical Hemoglobin Estimation',
+              subtitle: 'Research Gating Standard',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Estimated Hb Value', style: TextStyle(fontWeight: FontWeight.bold)),
-                      StatusBadge(label: 'Pending Phase 4', type: BadgeType.info),
+                      Text('Hb Value Status', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      StatusBadge(label: 'Pending Optical Calibration', type: BadgeType.warning),
                     ],
                   ),
-                  SizedBox(height: 8),
+                  SizedBox(height: 10),
                   Text(
-                    'No fake or simulated hemoglobin (g/dL) values are displayed. Hemoglobin concentration models require physical multispectral calibration (Phase 4).',
-                    style: TextStyle(fontSize: 13, color: Colors.black87),
+                    'In accordance with clinical protocol, no synthetic, mock, or simulated hemoglobin concentration (g/dL) values are displayed. Hemoglobin estimation requires full optical sensor calibration on physical hardware.',
+                    style: TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.4),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () {
-                      Navigator.pushNamedAndRemoveUntil(
-                        context,
-                        AppRoutes.dashboard,
-                        (route) => false,
-                      );
-                    },
-                    child: const Text('Dashboard'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pushNamed(context, AppRoutes.sessionHistory);
-                    },
-                    child: const Text('All Sessions'),
-                  ),
-                ),
-              ],
+
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pushNamedAndRemoveUntil(
+                  context,
+                  AppRoutes.dashboard,
+                  (route) => false,
+                );
+              },
+              child: const Text('Return to Home'),
+            ),
+            const SizedBox(height: 10),
+
+            OutlinedButton(
+              onPressed: () {
+                Navigator.pushNamed(context, AppRoutes.sessionHistory);
+              },
+              child: const Text('View All Sessions'),
             ),
           ],
         ),
@@ -92,16 +95,16 @@ class SessionResultScreen extends StatelessWidget {
 
   Widget _buildRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.black54)),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w500, color: Color(0xFF64748B), fontSize: 13)),
           Flexible(
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B), fontSize: 13),
             ),
           ),
         ],

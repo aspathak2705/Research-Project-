@@ -130,7 +130,10 @@ class HemoPiApp extends StatelessWidget {
             );
           case AppRoutes.diagnostics:
             return MaterialPageRoute(
-              builder: (_) => DiagnosticsScreen(diagnosticsService: diagnosticsService),
+              builder: (_) => DiagnosticsScreen(
+                diagnosticsService: diagnosticsService,
+                deviceService: deviceService,
+              ),
             );
           case AppRoutes.recentReports:
             return MaterialPageRoute(

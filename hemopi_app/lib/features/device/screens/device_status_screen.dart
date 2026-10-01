@@ -4,6 +4,7 @@ import '../../../core/models/sensor_status.dart';
 import '../../../core/services/device_service.dart';
 import '../../../shared/widgets/custom_card.dart';
 import '../../../shared/widgets/status_badge.dart';
+import '../../../app/routes.dart';
 
 class DeviceStatusScreen extends StatefulWidget {
   final DeviceService deviceService;
@@ -48,7 +49,7 @@ class _DeviceStatusScreenState extends State<DeviceStatusScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = 'HemoPi could not be reached. Ensure the instrument is powered on and connected to Wi-Fi.';
           _isLoading = false;
         });
       }
@@ -59,10 +60,11 @@ class _DeviceStatusScreenState extends State<DeviceStatusScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Device Status'),
+        title: const Text('Instrument Status'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Refresh Status',
             onPressed: _loadStatus,
           ),
         ],
@@ -71,69 +73,90 @@ class _DeviceStatusScreenState extends State<DeviceStatusScreen> {
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text('Error: $_error', style: const TextStyle(color: Colors.red)),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _loadStatus,
-                        child: const Text('Retry'),
-                      ),
-                    ],
+                  child: Padding(
+                    padding: const EdgeInsets.all(32.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.wifi_off_rounded, size: 56, color: Color(0xFFDC2626)),
+                        const SizedBox(height: 16),
+                        Text(
+                          _error!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 15, color: Color(0xFF1E293B), height: 1.4),
+                        ),
+                        const SizedBox(height: 20),
+                        ElevatedButton(
+                          onPressed: _loadStatus,
+                          child: const Text('Retry Connection'),
+                        ),
+                      ],
+                    ),
                   ),
                 )
               : SingleChildScrollView(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // Overall Connection Card
                       CustomCard(
-                        title: 'Hardware System',
-                        subtitle: _deviceInfo?.deviceName ?? 'HemoPi Device',
+                        title: 'HemoPi Instrument',
+                        subtitle: _deviceInfo?.deviceName ?? 'HemoPi Portable Analyzer',
+                        trailing: StatusBadge(
+                          label: _deviceInfo?.isConnected == true ? 'Connected' : 'Offline',
+                          type: _deviceInfo?.isConnected == true ? BadgeType.connected : BadgeType.error,
+                        ),
                         child: Column(
                           children: [
-                            _buildRow('Model', _deviceInfo?.hardwareModel ?? 'Unknown'),
-                            _buildRow('Hostname', _deviceInfo?.hostname ?? 'hemopi.local'),
-                            _buildRow('IP Address', _deviceInfo?.ipAddress ?? 'Disconnected'),
-                            _buildRow('Firmware', _deviceInfo?.firmwareVersion ?? 'v1.0.0'),
-                            _buildRow(
-                              'Connection',
-                              _deviceInfo?.isConnected == true ? 'Connected' : 'Disconnected',
+                            _buildInfoRow('Connection', _deviceInfo?.isConnected == true ? 'Online on local network' : 'Not reachable'),
+                            const Divider(height: 16),
+                            _buildInfoRow('System Status', 'Active & Operational'),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Sensor Verification Card
+                      CustomCard(
+                        title: 'Sensor Hardware',
+                        subtitle: 'Physical sensor detection & clinical validation state',
+                        child: Column(
+                          children: [
+                            _buildSensorTile(
+                              name: 'Optical Pulse & PPG Sensor',
+                              description: 'Captures blood volumetric changes and pulse rate',
+                              isDetected: _sensorStatus?.max30102Present == true,
+                              isValidated: _sensorStatus?.max30102ResearchReady == true,
+                            ),
+                            const Divider(height: 20),
+                            _buildSensorTile(
+                              name: 'Multispectral Optical Sensor',
+                              description: 'Captures 8-wavelength light absorption spectrum',
+                              isDetected: _sensorStatus?.as7341Present == true,
+                              isValidated: _sensorStatus?.as7341ResearchReady == true,
+                              pendingNote: 'Physical optical validation pending completion',
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 16),
-                      CustomCard(
-                        title: 'Sensors (Physical Hardware Only)',
-                        subtitle: 'Phase 1 - Direct hardware verification',
-                        child: Column(
-                          children: [
-                            _buildSensorRow(
-                              'MAX30102 PPG',
-                              'I2C: 0x57',
-                              _sensorStatus?.max30102Present == true,
-                              _sensorStatus?.max30102Message ?? 'No reading',
-                            ),
-                            const Divider(),
-                            _buildSensorRow(
-                              'AS7341 Spectral',
-                              'I2C: 0x39',
-                              _sensorStatus?.as7341Present == true,
-                              _sensorStatus?.as7341Message ?? 'No reading',
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+
+                      // Clinical Honesty Notice
                       const CustomCard(
-                        title: 'Phase Scope & Scientific Honesty',
-                        subtitle: 'Validation status',
+                        title: 'Research Validation Standard',
                         child: Text(
-                          'Note: Physical MAX30102 PPG and AS7341 8-channel spectral data validation is deferred to Phase 3 & 4. No synthetic, fake, or mock readings are generated.',
-                          style: TextStyle(fontSize: 13, color: Colors.black87),
+                          'HemoPi strictly prohibits simulated or fallback sensor readings. When sensor validation is pending, measurement acquisition is gated to protect research data integrity.',
+                          style: TextStyle(fontSize: 13, color: Color(0xFF64748B), height: 1.4),
                         ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Technician Diagnostics Entry Button
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.build_circle_outlined, size: 20),
+                        label: const Text('View Technician Diagnostics'),
+                        onPressed: () => Navigator.pushNamed(context, AppRoutes.diagnostics),
                       ),
                     ],
                   ),
@@ -141,44 +164,59 @@ class _DeviceStatusScreenState extends State<DeviceStatusScreen> {
     );
   }
 
-  Widget _buildRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.black54)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
-        ],
-      ),
+  Widget _buildInfoRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(color: Color(0xFF64748B), fontSize: 13)),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF1E293B))),
+      ],
     );
   }
 
-  Widget _buildSensorRow(String name, String i2cAddr, bool present, String statusMessage) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildSensorTile({
+    required String name,
+    required String description,
+    required bool isDetected,
+    required bool isValidated,
+    String? pendingNote,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          isDetected ? (isValidated ? Icons.check_circle_rounded : Icons.info_rounded) : Icons.cancel_rounded,
+          color: isDetected ? (isValidated ? const Color(0xFF0D8A58) : const Color(0xFFD97706)) : const Color(0xFFDC2626),
+          size: 22,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              StatusBadge(
-                label: present ? 'Detected' : 'Not Detected',
-                type: present ? BadgeType.success : BadgeType.error,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B))),
+                  StatusBadge(
+                    label: isDetected ? (isValidated ? 'Ready' : 'Pending') : 'Missing',
+                    type: isDetected ? (isValidated ? BadgeType.ready : BadgeType.warning) : BadgeType.error,
+                  ),
+                ],
               ),
+              const SizedBox(height: 3),
+              Text(description, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+              if (pendingNote != null && !isValidated) ...[
+                const SizedBox(height: 4),
+                Text(
+                  pendingNote,
+                  style: const TextStyle(fontSize: 11, color: Color(0xFFD97706), fontStyle: FontStyle.italic),
+                ),
+              ],
             ],
           ),
-          const SizedBox(height: 4),
-          Text(i2cAddr, style: const TextStyle(color: Colors.black54, fontSize: 12)),
-          const SizedBox(height: 4),
-          Text(
-            statusMessage,
-            style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
