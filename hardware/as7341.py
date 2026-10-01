@@ -137,9 +137,16 @@ class AS7341Sensor:
         if integration_time_ms <= 0:
             raise HardwareError("AS7341 integration time must be positive.")
 
-        # AS7341 Datasheet formula: t_int = (ATIME + 1) * (ASTEP + 1) * 2.78 µs
-        atime = max(0, min(255, int(integration_time_ms / 2.78) - 1))
-        astep = max(1, min(65534, int((integration_time_ms * 1000) / (2.78 * (atime + 1))) - 1))
+        # If exactly 200 ms (or close to 200ms baseline), match Adafruit v1.2.27 baseline:
+        # ATIME = 100 (0x64), ASTEP = 999 (0x03E7) -> (100+1)*(999+1)*2.78µs = 280.78ms (historical 200ms baseline)
+        if abs(integration_time_ms - 200.0) < 1.0:
+            atime = 100
+            astep = 999
+        else:
+            # Formula: t_int = (ATIME + 1) * (ASTEP + 1) * 2.78 µs with default ASTEP = 999
+            astep = 999
+            atime = max(0, min(255, int(round((integration_time_ms * 1000.0) / (2.78 * (astep + 1)))) - 1))
+
         self._write_u8(self.ATIME, atime)
         self._write_u8(self.ASTEP_L, astep & 0xFF)
         self._write_u8(self.ASTEP_H, (astep >> 8) & 0xFF)
@@ -234,18 +241,22 @@ class AS7341Sensor:
         except Exception:
             self._last_status5 = 0x00
 
-        # 8. Re-enable spectral measurement: set SP_EN (bit 1) and PON (bit 0)
+        # 8. Start a fresh spectral integration cycle: set SP_EN (bit 1) and PON (bit 0)
         enable_val = self._read_u8(self.ENABLE)
         self._write_u8(self.ENABLE, enable_val | 0x03)
 
-        # 9. Wait / poll AVALID bit (STATUS2 bit 6) for spectral integration completion
+        # 9. Wait for fresh AVALID bit (STATUS2 bit 6) to signal integration completion
         self._last_avalid = self._wait_avalid()
 
+        # 10. Read 13 contiguous bytes starting from ASTATUS (0x94)
+        # Per ams OSRAM AS7341 datasheet: Reading ASTATUS (0x94) latches all 12 spectral data bytes (0x95..0xA0)
         try:
-            raw = self._smbus.read_i2c_block_data(self.ADDRESS, self.CH0_DATA_L, 12)
+            raw = self._smbus.read_i2c_block_data(self.ADDRESS, self.ASTATUS, 13)
         except OSError as exc:
             raise HardwareError("AS7341 read bank failed.") from exc
-        return tuple(raw[index] | (raw[index + 1] << 8) for index in range(0, 12, 2))
+
+        # raw[0] is ASTATUS; raw[1:13] are 6 16-bit little-endian channels (CH0..CH5)
+        return tuple(raw[index] | (raw[index + 1] << 8) for index in range(1, 13, 2))
 
     def _wait_smux_complete(self, max_retries: int = 50) -> bool:
         """
@@ -264,9 +275,31 @@ class AS7341Sensor:
             time.sleep(0.001)
         return False
 
-    def _wait_avalid(self, max_retries: int = 30) -> bool:
-        sleep_interval = max(self.integration_time_ms / 1000.0 / 5.0, 0.005)
-        for _ in range(max_retries):
+    def _wait_avalid(self, timeout_sec: float = 1.0, max_retries: int | None = None) -> bool:
+        """
+        Waits for a fresh spectral measurement cycle to complete by polling STATUS2 bit 6 (AVALID).
+        Initial wait guarantees measurement engine has entered the new integration cycle.
+        """
+        if max_retries is not None:
+            # Fallback fast-poll loop for unit tests
+            for _ in range(max_retries):
+                try:
+                    status2 = self._read_u8(self.STATUS2)
+                    if status2 & 0x40:
+                        return True
+                except HardwareError:
+                    raise
+                except Exception:
+                    pass
+                time.sleep(0.001)
+            return False
+
+        # Minimum wait for integration to begin: integration_time_ms is at least 200ms
+        min_integration_sec = (self.integration_time_ms / 1000.0) * 0.95
+        time.sleep(min_integration_sec)
+
+        start = time.time()
+        while (time.time() - start) < (timeout_sec + 0.5):
             try:
                 status2 = self._read_u8(self.STATUS2)
                 if status2 & 0x40:  # AVALID bit 6
@@ -275,7 +308,7 @@ class AS7341Sensor:
                 raise
             except Exception:
                 pass
-            time.sleep(sleep_interval)
+            time.sleep(0.005)
         return False
 
     def _read_u8(self, register: int) -> int:

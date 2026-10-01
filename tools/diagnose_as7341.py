@@ -88,6 +88,16 @@ def main():
     try:
         sensor.initialize()
         print("[PASS] Driver initialization sequence executed.")
+        atime_val = smbus.read_byte_data(0x39, 0x81)
+        astep_l = smbus.read_byte_data(0x39, 0xCA)
+        astep_h = smbus.read_byte_data(0x39, 0xCB)
+        cfg1_val = smbus.read_byte_data(0x39, 0xAA)
+        enable_val = smbus.read_byte_data(0x39, 0x80)
+        print(f"Verified Configuration Registers:")
+        print(f"  ATIME (0x81)   : 0x{atime_val:02X} (Expected: 0x64 for 200ms baseline)")
+        print(f"  ASTEP (0xCA/CB): 0x{(astep_h << 8) | astep_l:04X} (Expected: 0x03E7)")
+        print(f"  CFG1 (0xAA)    : 0x{cfg1_val:02X} (Expected: 0x08 for GAIN_128X)")
+        print(f"  ENABLE (0x80)  : 0x{enable_val:02X}")
     except Exception as exc:
         print(f"[FAIL] Driver initialization failed: {exc}")
         sys.exit(1)
