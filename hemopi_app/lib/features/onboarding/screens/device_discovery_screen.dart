@@ -23,12 +23,53 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
     _startDiscovery();
   }
 
-  Future<void> _startDiscovery() async {
+  Future<void> _startDiscovery({String? hostOrIp}) async {
     setState(() => _isSearching = true);
-    await widget.deviceService.discoverDevice();
+    await widget.deviceService.discoverDevice(hostOrIp: hostOrIp);
     if (mounted) {
       setState(() => _isSearching = false);
     }
+  }
+
+  void _showManualIpDialog() {
+    final controller = TextEditingController(text: widget.deviceService.baseUrl);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('HemoPi Address / IP Fallback'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter the HemoPi mDNS address or direct IP if mDNS is unavailable on this network:',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'e.g. 192.168.1.100 or hemopi.local',
+                labelText: 'Host or IP URL',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _startDiscovery(hostOrIp: controller.text);
+            },
+            child: const Text('Connect'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -138,6 +179,12 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
                       foregroundColor: theme.colorScheme.onPrimary,
                     ),
                     child: Text(isConnected ? 'Connect to Device' : 'Retry Discovery'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: _showManualIpDialog,
+                    icon: const Icon(Icons.settings_ethernet),
+                    label: const Text('Configure IP / Host Fallback'),
                   ),
                 ],
                 const SizedBox(height: 16),

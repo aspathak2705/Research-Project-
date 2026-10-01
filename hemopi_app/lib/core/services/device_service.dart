@@ -6,7 +6,9 @@ import '../network/api_client.dart';
 abstract class DeviceService {
   ValueListenable<DeviceInfo> get deviceInfoNotifier;
   ValueListenable<List<SensorStatus>> get sensorStatusNotifier;
-  Future<bool> discoverDevice();
+  String get baseUrl;
+  void setBaseUrl(String url);
+  Future<bool> discoverDevice({String? hostOrIp});
   Future<bool> validateConnection();
   Future<DeviceInfo> getDeviceInfo();
   Future<SensorStatus> getSensorStatus();
@@ -24,15 +26,32 @@ class HttpDeviceService implements DeviceService {
   HttpDeviceService({ApiClient? client}) : apiClient = client ?? ApiClient();
 
   @override
+  String get baseUrl => apiClient.baseUrl;
+
+  @override
+  void setBaseUrl(String url) {
+    apiClient.baseUrl = url;
+  }
+
+  @override
   ValueListenable<DeviceInfo> get deviceInfoNotifier => _deviceInfo;
 
   @override
   ValueListenable<List<SensorStatus>> get sensorStatusNotifier => _sensorStatuses;
 
   @override
-  Future<bool> discoverDevice() async {
+  Future<bool> discoverDevice({String? hostOrIp}) async {
+    if (hostOrIp != null && hostOrIp.trim().isNotEmpty) {
+      final trimmed = hostOrIp.trim();
+      final url = trimmed.startsWith('http://') || trimmed.startsWith('https://')
+          ? trimmed
+          : 'http://$trimmed:8000';
+      apiClient.baseUrl = url;
+    }
+
+    final targetHost = Uri.tryParse(apiClient.baseUrl)?.host ?? 'hemopi.local';
     _deviceInfo.value = DeviceInfo(
-      hostname: 'hemopi.local',
+      hostname: targetHost,
       deviceName: 'HemoPi Portable Analyzer',
       connectionStatus: ConnectionStateStatus.searching,
       apiStatus: ApiStateStatus.unavailable,
