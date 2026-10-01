@@ -1,64 +1,64 @@
-# Portable Hemoglobin Analyzer - Milestone 0
+# HemoPi — Portable Non-Invasive Hemoglobin Research Platform
 
-Biomedical data acquisition platform for Raspberry Pi 4 using MAX30102 and AS7341.
+Integrated biomedical data acquisition system for Raspberry Pi 4 Model B using AMS AS7341 11-channel spectral sensor and Maxim MAX30102 pulse oximetry sensor, connected to a FastAPI backend and Flutter cross-platform companion application.
 
-## Milestone 0 scope
+---
 
-- Acquire synchronized optical sensor data
-- Validate signal quality before storage
-- Save patient-wise CSV sessions automatically
-- Queue and sync session files to Google Drive
-
-No ML, prediction, dashboards, or reporting in this milestone.
-
-## Current implementation
-
-This repo contains a runnable milestone skeleton with:
-
-- device state machine
-- mock-friendly hardware layer
-- signal quality validator
-- patient/session folder manager
-- CSV writer
-- offline-first Google Drive sync queue
-
-Real Raspberry Pi drivers and Google Drive credentials can be plugged into existing module boundaries without changing workflow code.
-
-## Quick start
-
-```bash
-python main.py --patient "Test Patient" --samples 24
-```
-
-Mock mode is enabled by default. Output files land under `data/raw/Patient_Data/`.
-
-## Project structure
+## 1. System Architecture
 
 ```text
-portable-hemo-ai/
-├── main.py
-├── config/
-├── device/
-├── hardware/
-├── processing/
-├── storage/
-├── cloud/
-├── utils/
-├── data/
-└── tests/
+Physical Hardware (Raspberry Pi 4 Model B)
+├── I2C Bus 1 (/dev/i2c-1)
+│   ├── AS7341 (0x39)  <-- adafruit-circuitpython-as7341==1.2.27 (Official Driver)
+│   └── MAX30102 (0x57)<-- smbus2 PPG Driver
+├── Linux Networking (NetworkManager / nmcli, Avahi mDNS -> hemopi.local)
+├── FastAPI Backend Service (Uvicorn / systemd on port 8000)
+│   ├── /api/health          (Liveness and safety readiness)
+│   ├── /api/device/status   (Hardware diagnostics and presence)
+│   ├── /api/network/*       (Wi-Fi scan, connect, disconnect, status)
+│   ├── /api/patients        (Subject profile management)
+│   └── /api/sessions        (Acquisition safety gate - HTTP 409 when unvalidated)
+└── Flutter Mobile App (hemopi_app)
+    ├── Device Discovery & Wi-Fi Provisioning
+    ├── Hardware Status Dashboard
+    └── Patient & Research Workflow Management
 ```
 
-## Environment variables
+---
 
-- `HEMO_DATA_ROOT` - override local data directory
-- `HEMO_UPLOAD_QUEUE` - override upload queue directory
-- `HEMO_GOOGLE_DRIVE_ROOT` - drive root folder name
-- `HEMO_MOCK_MODE` - `true` or `false`
-- `HEMO_LOG_LEVEL` - `DEBUG`, `INFO`, etc.
+## 2. Research Safety & Data Integrity Standards
 
-## Next hardware steps
+1. **Zero Synthetic Data**: Real hardware measurements only. Fake spectral data, simulated patient readings, and synthetic sensor streams are prohibited.
+2. **Strict Acquisition Gating**: Research sessions are strictly gated until physical calibration and validation are achieved (`physically_validated=false`, `research_ready=false`). Unvalidated sessions return `HTTP 409 ACQUISITION_NOT_READY`.
+3. **Verified Production Drivers**: Custom AS7341 SMUX driver deprecated in favor of official `adafruit-circuitpython-as7341==1.2.27`.
 
-1. Replace mock read methods in `hardware/max30102.py` and `hardware/as7341.py`.
-2. Add real I2C init in `hardware/i2c_bus.py`.
-3. Add Google API credential flow in `cloud/google_drive.py`.
+---
 
+## 3. Quick Start & Verification
+
+### Python Environment
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### Run Automated Test Suites
+```bash
+# Core hardware and validator tests
+python -m unittest discover -s tests
+
+# Backend API endpoint tests
+python -m unittest discover -s backend/tests
+```
+
+### Run Flutter Client Tests
+```bash
+cd hemopi_app
+flutter analyze
+flutter test
+```
+
+### Full Deployment & Operations
+For physical wiring diagrams, systemd deployment, network manager configuration, and troubleshooting steps, refer to:
+[Deployment & Operations Guide](file:///c:/Users/athar/OneDrive/Documents/projects/Research-Project-/docs/deployment_and_operations.md)

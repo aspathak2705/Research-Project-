@@ -1,0 +1,22 @@
+[Unit]
+Description=HemoPi Research Backend API Service
+After=network.target i2c.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/Research-Project-
+Environment="PATH=/home/pi/Research-Project-/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
+Environment="PYTHONUNBUFFERED=1"
+Environment="HEMOPI_PORT=8000"
+Environment="HEMOPI_HOSTNAME=hemopi.local"
+ExecStart=/home/pi/Research-Project-/.venv/bin/uvicorn backend.app:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
