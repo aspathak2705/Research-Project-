@@ -36,6 +36,8 @@ class DeviceBackendService:
     def get_device_status() -> dict:
         sensors = DeviceBackendService.get_sensor_health_info()
         return {
+            "device_id": "HemoPi-001",
+            "device_name": "HemoPi Portable Analyzer",
             "hostname": NetworkManagerService.get_hostname(),
             "ip_address": NetworkManagerService.get_ip_address(),
             "connection_state": NetworkManagerService.get_connection_state(),
@@ -50,6 +52,8 @@ class DeviceBackendService:
         as_ready = sensors["as7341"]["research_ready"]
         
         return {
+            "device_id": "HemoPi-001",
+            "device_name": "HemoPi Portable Analyzer",
             "api": "ok",
             "hostname": NetworkManagerService.get_hostname(),
             "network": NetworkManagerService.get_connection_state(),

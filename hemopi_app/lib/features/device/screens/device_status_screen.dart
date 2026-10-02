@@ -152,6 +152,14 @@ class _DeviceStatusScreenState extends State<DeviceStatusScreen> {
                       ),
                       const SizedBox(height: 24),
 
+                      // Wi-Fi Setup / Recovery Action
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.wifi_find_rounded, size: 20),
+                        label: const Text('Change Wi-Fi Network'),
+                        onPressed: () => Navigator.pushNamed(context, AppRoutes.wifiSetup),
+                      ),
+                      const SizedBox(height: 12),
+
                       // Technician Diagnostics Entry Button
                       OutlinedButton.icon(
                         icon: const Icon(Icons.build_circle_outlined, size: 20),

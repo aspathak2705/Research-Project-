@@ -65,7 +65,10 @@ class HemoPiApp extends StatelessWidget {
             );
           case AppRoutes.wifiSetup:
             return MaterialPageRoute(
-              builder: (_) => WifiSetupScreen(wifiService: wifiService),
+              builder: (_) => WifiSetupScreen(
+                wifiService: wifiService,
+                deviceService: deviceService,
+              ),
             );
           case AppRoutes.connectionValidation:
             return MaterialPageRoute(

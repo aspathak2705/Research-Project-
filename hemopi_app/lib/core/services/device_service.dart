@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/device_info.dart';
 import '../models/sensor_status.dart';
 import '../network/api_client.dart';
+import '../storage/local_database_service.dart';
 
 abstract class DeviceService {
   ValueListenable<DeviceInfo> get deviceInfoNotifier;
@@ -12,10 +14,16 @@ abstract class DeviceService {
   Future<bool> validateConnection();
   Future<DeviceInfo> getDeviceInfo();
   Future<SensorStatus> getSensorStatus();
+  Future<void> pairDevice({required String deviceId, required String deviceName, required String host});
+  Future<Map<String, dynamic>?> getPairedDevice();
+  Future<void> unpairDevice();
+  void startAutoReconnect();
+  void stopAutoReconnect();
 }
 
 class HttpDeviceService implements DeviceService {
   final ApiClient apiClient;
+  final LocalDatabaseService dbService;
 
   final ValueNotifier<DeviceInfo> _deviceInfo = ValueNotifier(DeviceInfo.unconnected());
   final ValueNotifier<List<SensorStatus>> _sensorStatuses = ValueNotifier([
@@ -23,7 +31,12 @@ class HttpDeviceService implements DeviceService {
     SensorStatus.as7341Pending(),
   ]);
 
-  HttpDeviceService({ApiClient? client}) : apiClient = client ?? ApiClient();
+  Timer? _reconnectTimer;
+  bool _isReconnecting = false;
+
+  HttpDeviceService({ApiClient? client, LocalDatabaseService? db})
+      : apiClient = client ?? ApiClient(),
+        dbService = db ?? LocalDatabaseService();
 
   @override
   String get baseUrl => apiClient.baseUrl;
@@ -40,36 +53,98 @@ class HttpDeviceService implements DeviceService {
   ValueListenable<List<SensorStatus>> get sensorStatusNotifier => _sensorStatuses;
 
   @override
+  Future<void> pairDevice({
+    required String deviceId,
+    required String deviceName,
+    required String host,
+  }) async {
+    await dbService.savePairedDevice(
+      deviceId: deviceId,
+      deviceName: deviceName,
+      host: host,
+    );
+  }
+
+  @override
+  Future<Map<String, dynamic>?> getPairedDevice() async {
+    return await dbService.getActivePairedDevice();
+  }
+
+  @override
+  Future<void> unpairDevice() async {
+    await dbService.unpairAllDevices();
+    _deviceInfo.value = DeviceInfo.unconnected();
+  }
+
+  @override
   Future<bool> discoverDevice({String? hostOrIp}) async {
+    final paired = await getPairedDevice();
+
+    List<String> candidateUrls = [];
+
     if (hostOrIp != null && hostOrIp.trim().isNotEmpty) {
       final trimmed = hostOrIp.trim();
-      final url = trimmed.startsWith('http://') || trimmed.startsWith('https://')
+      candidateUrls.add(trimmed.startsWith('http://') || trimmed.startsWith('https://')
           ? trimmed
-          : 'http://$trimmed:8000';
-      apiClient.baseUrl = url;
+          : 'http://$trimmed:8000');
     }
 
-    final targetHost = Uri.tryParse(apiClient.baseUrl)?.host ?? 'hemopi.local';
-    _deviceInfo.value = DeviceInfo(
-      hostname: targetHost,
-      deviceName: 'HemoPi Portable Analyzer',
+    if (paired != null && paired['last_known_host'] != null) {
+      final pairedHost = paired['last_known_host'] as String;
+      final pairedUrl = pairedHost.startsWith('http://') || pairedHost.startsWith('https://')
+          ? pairedHost
+          : 'http://$pairedHost:8000';
+      if (!candidateUrls.contains(pairedUrl)) {
+        candidateUrls.add(pairedUrl);
+      }
+    }
+
+    // Default fallbacks: mDNS and setup AP gateway
+    const defaultMdns = 'http://hemopi.local:8000';
+    const apGateway = 'http://192.168.4.1:8000';
+    if (!candidateUrls.contains(defaultMdns)) candidateUrls.add(defaultMdns);
+    if (!candidateUrls.contains(apGateway)) candidateUrls.add(apGateway);
+
+    _deviceInfo.value = _deviceInfo.value.copyWith(
       connectionStatus: ConnectionStateStatus.searching,
       apiStatus: ApiStateStatus.unavailable,
+      isConnected: false,
     );
-    try {
-      final res = await apiClient.get('/api/health');
-      if (res != null && (res['api'] == 'READY' || res['api'] == 'ok')) {
-        _deviceInfo.value = DeviceInfo(
-          hostname: res['hostname'] ?? 'hemopi.local',
-          deviceName: 'HemoPi Portable Analyzer',
-          connectionStatus: ConnectionStateStatus.connected,
-          apiStatus: ApiStateStatus.available,
-          isConnected: true,
-        );
-        return true;
+
+    for (final candidate in candidateUrls) {
+      try {
+        apiClient.baseUrl = candidate;
+        final res = await apiClient.get('/api/health');
+        if (res != null && (res['api'] == 'READY' || res['api'] == 'ok')) {
+          final devId = res['device_id'] ?? (paired?['device_id'] ?? 'HemoPi-001');
+          final devName = res['device_name'] ?? (paired?['device_name'] ?? 'HemoPi Portable Analyzer');
+          final host = res['hostname'] ?? Uri.parse(candidate).host;
+
+          // Automatically remember/update pairing
+          await pairDevice(deviceId: devId, deviceName: devName, host: host);
+
+          _deviceInfo.value = DeviceInfo(
+            deviceId: devId,
+            deviceName: devName,
+            hostname: host,
+            ipAddress: Uri.parse(candidate).host,
+            connectionStatus: ConnectionStateStatus.connected,
+            apiStatus: ApiStateStatus.available,
+            isConnected: true,
+          );
+          return true;
+        }
+      } catch (_) {
+        // Try next candidate
       }
-    } catch (_) {}
-    _deviceInfo.value = DeviceInfo.unconnected();
+    }
+
+    // Not reachable
+    _deviceInfo.value = _deviceInfo.value.copyWith(
+      connectionStatus: paired != null ? ConnectionStateStatus.connectionLost : ConnectionStateStatus.notConfigured,
+      apiStatus: ApiStateStatus.unavailable,
+      isConnected: false,
+    );
     return false;
   }
 
@@ -83,22 +158,32 @@ class HttpDeviceService implements DeviceService {
     try {
       final res = await apiClient.get('/api/device/status');
       if (res != null) {
+        final paired = await getPairedDevice();
+        final devId = res['device_id'] ?? (paired?['device_id'] ?? _deviceInfo.value.deviceId);
+        final devName = res['device_name'] ?? (paired?['device_name'] ?? _deviceInfo.value.deviceName);
+
+        final isConn = res['connection_state'] == 'CONNECTED';
         final info = DeviceInfo(
+          deviceId: devId,
+          deviceName: devName,
           hostname: res['hostname'] ?? 'hemopi.local',
-          deviceName: 'HemoPi Portable Analyzer',
           hardwareModel: 'Raspberry Pi 4 Model B',
           ipAddress: res['ip_address'] ?? 'Disconnected',
           firmwareVersion: 'v2.0.0-Phase2',
-          isConnected: res['connection_state'] == 'CONNECTED',
-          connectionStatus: res['connection_state'] == 'CONNECTED'
-              ? ConnectionStateStatus.connected
-              : ConnectionStateStatus.disconnected,
+          isConnected: isConn,
+          connectionStatus: isConn ? ConnectionStateStatus.connected : ConnectionStateStatus.connectionLost,
           apiStatus: ApiStateStatus.available,
         );
         _deviceInfo.value = info;
         return info;
       }
-    } catch (_) {}
+    } catch (_) {
+      _deviceInfo.value = _deviceInfo.value.copyWith(
+        isConnected: false,
+        connectionStatus: ConnectionStateStatus.connectionLost,
+        apiStatus: ApiStateStatus.unavailable,
+      );
+    }
     return _deviceInfo.value;
   }
 
@@ -132,5 +217,33 @@ class HttpDeviceService implements DeviceService {
       }
     } catch (_) {}
     return SensorStatus.max30102Pending();
+  }
+
+  @override
+  void startAutoReconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer.periodic(const Duration(seconds: 4), (timer) async {
+      if (_isReconnecting) return;
+
+      // Only attempt reconnect if we lost connection to a previously paired or configured device
+      final currentStatus = _deviceInfo.value.connectionStatus;
+      if (currentStatus == ConnectionStateStatus.connectionLost ||
+          currentStatus == ConnectionStateStatus.reconnecting ||
+          (!_deviceInfo.value.isConnected && currentStatus != ConnectionStateStatus.notConfigured)) {
+        _isReconnecting = true;
+        _deviceInfo.value = _deviceInfo.value.copyWith(
+          connectionStatus: ConnectionStateStatus.reconnecting,
+        );
+
+        await discoverDevice();
+        _isReconnecting = false;
+      }
+    });
+  }
+
+  @override
+  void stopAutoReconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
   }
 }

@@ -21,12 +21,36 @@ class LocalDatabaseService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS paired_devices (
+          device_id TEXT PRIMARY KEY,
+          device_name TEXT NOT NULL,
+          last_known_host TEXT NOT NULL,
+          paired_at TEXT NOT NULL,
+          is_active INTEGER NOT NULL
+        )
+      ''');
+    }
+  }
+
   Future<void> _onCreate(Database db, int version) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS paired_devices (
+        device_id TEXT PRIMARY KEY,
+        device_name TEXT NOT NULL,
+        last_known_host TEXT NOT NULL,
+        paired_at TEXT NOT NULL,
+        is_active INTEGER NOT NULL
+      )
+    ''');
     await db.execute('''
       CREATE TABLE patients (
         patient_id TEXT PRIMARY KEY,
@@ -199,10 +223,49 @@ class LocalDatabaseService {
     return ReportMetadata.fromMap(maps.first);
   }
 
+  // Paired Device CRUD
+  Future<void> savePairedDevice({
+    required String deviceId,
+    required String deviceName,
+    required String host,
+  }) async {
+    final db = await database;
+    // Set all others inactive
+    await db.update('paired_devices', {'is_active': 0});
+    await db.insert(
+      'paired_devices',
+      {
+        'device_id': deviceId,
+        'device_name': deviceName,
+        'last_known_host': host,
+        'paired_at': DateTime.now().toIso8601String(),
+        'is_active': 1,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Map<String, dynamic>?> getActivePairedDevice() async {
+    final db = await database;
+    final maps = await db.query(
+      'paired_devices',
+      where: 'is_active = 1',
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return maps.first;
+  }
+
+  Future<void> unpairAllDevices() async {
+    final db = await database;
+    await db.delete('paired_devices');
+  }
+
   Future<void> clearAllLocalData() async {
     final db = await database;
     await db.delete('report_metadata');
     await db.delete('measurement_sessions');
     await db.delete('patients');
+    await db.delete('paired_devices');
   }
 }

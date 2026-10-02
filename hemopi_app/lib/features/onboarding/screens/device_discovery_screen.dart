@@ -19,7 +19,15 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
   @override
   void initState() {
     super.initState();
+    // Start automated background reconnection and perform initial discovery
+    widget.deviceService.startAutoReconnect();
     _startDiscovery();
+  }
+
+  @override
+  void dispose() {
+    widget.deviceService.stopAutoReconnect();
+    super.dispose();
   }
 
   Future<void> _startDiscovery({String? hostOrIp}) async {
@@ -41,8 +49,9 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
           children: [
             Text(
               '1. Power on your HemoPi instrument using its official power adapter.\n\n'
-              '2. Confirm this phone is connected to the same clinic or laboratory Wi-Fi network.\n\n'
-              '3. If your clinic uses an enterprise network with device isolation, contact your technician or use Advanced Device Setup.',
+              '2. First-time setup? Tap "Set Up HemoPi" to connect the instrument to your clinic Wi-Fi.\n\n'
+              '3. After setup, HemoPi securely remembers your Wi-Fi credentials and reconnects automatically every time it is powered on.\n\n'
+              '4. If your clinic uses network device isolation, contact your technician or use Technician Setup.',
               style: TextStyle(height: 1.4),
             ),
           ],
@@ -62,6 +71,89 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
         ],
       ),
     );
+  }
+
+  String _getStatusTitle(ConnectionStateStatus status) {
+    switch (status) {
+      case ConnectionStateStatus.connected:
+        return 'HemoPi Connected';
+      case ConnectionStateStatus.searching:
+        return 'Searching for HemoPi…';
+      case ConnectionStateStatus.found:
+        return 'HemoPi Found';
+      case ConnectionStateStatus.connecting:
+        return 'Connecting to HemoPi…';
+      case ConnectionStateStatus.reconnecting:
+        return 'Reconnecting to HemoPi…';
+      case ConnectionStateStatus.connectionLost:
+        return 'Connection Lost';
+      case ConnectionStateStatus.setupRequired:
+        return 'Setup Required';
+      case ConnectionStateStatus.notConfigured:
+      case ConnectionStateStatus.error:
+        return 'HemoPi Not Connected';
+    }
+  }
+
+  String _getStatusDescription(ConnectionStateStatus status, String? deviceId) {
+    switch (status) {
+      case ConnectionStateStatus.connected:
+        return 'Paired instrument (${deviceId ?? "HemoPi-001"}) is online and ready for operation.';
+      case ConnectionStateStatus.searching:
+        return 'Looking for your paired HemoPi on the local network…';
+      case ConnectionStateStatus.found:
+        return 'Found HemoPi. Establishing secure session…';
+      case ConnectionStateStatus.connecting:
+        return 'Connecting to HemoPi…';
+      case ConnectionStateStatus.reconnecting:
+        return 'HemoPi connection temporarily interrupted. Reconnecting automatically…';
+      case ConnectionStateStatus.connectionLost:
+        return 'Cannot reach paired HemoPi. Ensure the instrument is powered on within Wi-Fi range.';
+      case ConnectionStateStatus.setupRequired:
+      case ConnectionStateStatus.notConfigured:
+      case ConnectionStateStatus.error:
+        return 'If this is your first time using this HemoPi, tap "Set Up HemoPi" to connect it to Wi-Fi.';
+    }
+  }
+
+  BadgeType _getBadgeType(ConnectionStateStatus status) {
+    switch (status) {
+      case ConnectionStateStatus.connected:
+        return BadgeType.connected;
+      case ConnectionStateStatus.searching:
+      case ConnectionStateStatus.found:
+      case ConnectionStateStatus.connecting:
+      case ConnectionStateStatus.reconnecting:
+        return BadgeType.validating;
+      case ConnectionStateStatus.connectionLost:
+        return BadgeType.warning;
+      case ConnectionStateStatus.setupRequired:
+      case ConnectionStateStatus.notConfigured:
+      case ConnectionStateStatus.error:
+        return BadgeType.error;
+    }
+  }
+
+  String _getBadgeLabel(ConnectionStateStatus status) {
+    switch (status) {
+      case ConnectionStateStatus.connected:
+        return 'Connected';
+      case ConnectionStateStatus.searching:
+        return 'Searching';
+      case ConnectionStateStatus.found:
+        return 'Found';
+      case ConnectionStateStatus.connecting:
+        return 'Connecting';
+      case ConnectionStateStatus.reconnecting:
+        return 'Reconnecting…';
+      case ConnectionStateStatus.connectionLost:
+        return 'Connection Lost';
+      case ConnectionStateStatus.setupRequired:
+        return 'Setup Required';
+      case ConnectionStateStatus.notConfigured:
+      case ConnectionStateStatus.error:
+        return 'Not Connected';
+    }
   }
 
   @override
@@ -88,6 +180,8 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
         valueListenable: widget.deviceService.deviceInfoNotifier,
         builder: (context, deviceInfo, _) {
           final isConnected = deviceInfo.connectionStatus == ConnectionStateStatus.connected;
+          final isReconnecting = deviceInfo.connectionStatus == ConnectionStateStatus.reconnecting ||
+              deviceInfo.connectionStatus == ConnectionStateStatus.connectionLost;
 
           return SafeArea(
             child: Padding(
@@ -103,17 +197,23 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
                       decoration: BoxDecoration(
                         color: isConnected
                             ? const Color(0xFFE8F5E9)
-                            : (_isSearching ? theme.colorScheme.primaryContainer : const Color(0xFFF1F5F9)),
+                            : (_isSearching || deviceInfo.connectionStatus == ConnectionStateStatus.reconnecting
+                                ? theme.colorScheme.primaryContainer
+                                : const Color(0xFFF1F5F9)),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         isConnected
                             ? Icons.check_circle_rounded
-                            : (_isSearching ? Icons.sync_rounded : Icons.sensors_rounded),
+                            : (_isSearching || deviceInfo.connectionStatus == ConnectionStateStatus.reconnecting
+                                ? Icons.sync_rounded
+                                : Icons.sensors_rounded),
                         size: 52,
                         color: isConnected
                             ? const Color(0xFF0D8A58)
-                            : (_isSearching ? theme.colorScheme.primary : const Color(0xFF64748B)),
+                            : (_isSearching || deviceInfo.connectionStatus == ConnectionStateStatus.reconnecting
+                                ? theme.colorScheme.primary
+                                : const Color(0xFF64748B)),
                       ),
                     ),
                   ),
@@ -128,7 +228,7 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Portable research instrument for hemoglobin and non-invasive optical sensor analysis.',
+                    'Portable research instrument for non-invasive hemoglobin analysis.',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: const Color(0xFF64748B),
                       height: 1.4,
@@ -147,37 +247,46 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text(
-                                'Instrument Status',
-                                style: TextStyle(
+                              Text(
+                                _getStatusTitle(deviceInfo.connectionStatus),
+                                style: const TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
                                   color: Color(0xFF1E293B),
                                 ),
                               ),
                               StatusBadge(
-                                label: isConnected
-                                    ? 'Connected'
-                                    : (_isSearching ? 'Searching…' : 'Not Connected'),
-                                type: isConnected
-                                    ? BadgeType.connected
-                                    : (_isSearching ? BadgeType.validating : BadgeType.error),
+                                label: _getBadgeLabel(deviceInfo.connectionStatus),
+                                type: _getBadgeType(deviceInfo.connectionStatus),
                               ),
                             ],
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            _isSearching
-                                ? 'Searching for your HemoPi on the clinic network…'
-                                : (isConnected
-                                    ? 'HemoPi instrument found and ready to connect.'
-                                    : 'HemoPi isn’t connected. Ensure the device is powered on and sharing the same Wi-Fi network.'),
+                            _getStatusDescription(deviceInfo.connectionStatus, deviceInfo.deviceId),
                             style: const TextStyle(
                               fontSize: 14,
                               color: Color(0xFF475569),
                               height: 1.4,
                             ),
                           ),
+                          if (isConnected) ...[
+                            const SizedBox(height: 14),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('Paired Device:', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                                  Text(deviceInfo.deviceId, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -202,21 +311,42 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
                       ),
                     )
                   else ...[
-                    ElevatedButton(
-                      onPressed: isConnected
-                          ? () => Navigator.pushNamedAndRemoveUntil(
-                                context,
-                                AppRoutes.dashboard,
-                                (route) => false,
-                              )
-                          : () => _startDiscovery(),
-                      child: Text(isConnected ? 'Enter Home' : 'Connect to HemoPi'),
-                    ),
-                    const SizedBox(height: 10),
-                    OutlinedButton(
-                      onPressed: _showHelpDialog,
-                      child: const Text('Need Help Connecting?'),
-                    ),
+                    if (isConnected) ...[
+                      ElevatedButton(
+                        onPressed: () => Navigator.pushNamedAndRemoveUntil(
+                          context,
+                          AppRoutes.dashboard,
+                          (route) => false,
+                        ),
+                        child: const Text('Enter Home'),
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton(
+                        onPressed: () => Navigator.pushNamed(context, AppRoutes.wifiSetup),
+                        child: const Text('Change Wi-Fi Network'),
+                      ),
+                    ] else ...[
+                      ElevatedButton.icon(
+                        icon: const Icon(Icons.search_rounded),
+                        onPressed: () => _startDiscovery(),
+                        label: const Text('Find Nearby HemoPi'),
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.wifi_find_rounded),
+                        onPressed: () => Navigator.pushNamed(context, AppRoutes.wifiSetup),
+                        label: const Text('Set Up HemoPi Wi-Fi'),
+                      ),
+                      if (isReconnecting) ...[
+                        const SizedBox(height: 10),
+                        Center(
+                          child: Text(
+                            'Automatic reconnection active…',
+                            style: theme.textTheme.bodySmall?.copyWith(color: const Color(0xFF64748B)),
+                          ),
+                        ),
+                      ],
+                    ],
                   ],
                   const SizedBox(height: 12),
                 ],

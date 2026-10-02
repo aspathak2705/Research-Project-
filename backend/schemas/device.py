@@ -12,6 +12,8 @@ class SensorHealthInfo(BaseModel):
     message: str
 
 class DeviceStatusResponse(BaseModel):
+    device_id: Optional[str] = "HemoPi-001"
+    device_name: Optional[str] = "HemoPi Portable Analyzer"
     hostname: str
     ip_address: Optional[str]
     connection_state: str
@@ -20,6 +22,8 @@ class DeviceStatusResponse(BaseModel):
     as7341: SensorHealthInfo
 
 class HealthCheckResponse(BaseModel):
+    device_id: Optional[str] = "HemoPi-001"
+    device_name: Optional[str] = "HemoPi Portable Analyzer"
     api: str
     hostname: str
     network: str
