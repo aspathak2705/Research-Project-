@@ -15,6 +15,7 @@ import '../core/models/report_metadata.dart';
 import '../features/onboarding/screens/device_discovery_screen.dart';
 import '../features/wifi/screens/wifi_setup_screen.dart';
 import '../features/device/screens/connection_validation_screen.dart';
+import '../features/device/screens/preflight_check_screen.dart';
 import '../features/dashboard/screens/dashboard_screen.dart';
 import '../features/device/screens/device_status_screen.dart';
 import '../features/patients/screens/patient_list_screen.dart';
@@ -73,6 +74,10 @@ class HemoPiApp extends StatelessWidget {
           case AppRoutes.connectionValidation:
             return MaterialPageRoute(
               builder: (_) => ConnectionValidationScreen(deviceService: deviceService),
+            );
+          case AppRoutes.preflightCheck:
+            return MaterialPageRoute(
+              builder: (_) => PreflightCheckScreen(deviceService: deviceService),
             );
           case AppRoutes.dashboard:
             return MaterialPageRoute(

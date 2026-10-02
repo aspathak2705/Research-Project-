@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/device_info.dart';
 import '../models/sensor_status.dart';
+import '../models/preflight_result.dart';
 import '../network/api_client.dart';
 import '../storage/local_database_service.dart';
 
@@ -14,6 +15,7 @@ abstract class DeviceService {
   Future<bool> validateConnection();
   Future<DeviceInfo> getDeviceInfo();
   Future<SensorStatus> getSensorStatus();
+  Future<PreflightResult> runPreflightCheck();
   Future<void> pairDevice({required String deviceId, required String deviceName, required String host});
   Future<Map<String, dynamic>?> getPairedDevice();
   Future<void> unpairDevice();
@@ -99,11 +101,13 @@ class HttpDeviceService implements DeviceService {
       }
     }
 
-    // Default fallbacks: mDNS and setup AP gateway
+    // Candidate 1: Standard mDNS hostname on local network (primary discovery mechanism)
     const defaultMdns = 'http://hemopi.local:8000';
-    const apGateway = 'http://192.168.4.1:8000';
     if (!candidateUrls.contains(defaultMdns)) candidateUrls.add(defaultMdns);
-    if (!candidateUrls.contains(apGateway)) candidateUrls.add(apGateway);
+
+    // Candidate 2: Optional factory setup AP gateway (used only during initial Wi-Fi provisioning hotspot mode)
+    const setupApGateway = 'http://192.168.4.1:8000';
+    if (!candidateUrls.contains(setupApGateway)) candidateUrls.add(setupApGateway);
 
     _deviceInfo.value = _deviceInfo.value.copyWith(
       connectionStatus: ConnectionStateStatus.searching,
@@ -217,6 +221,93 @@ class HttpDeviceService implements DeviceService {
       }
     } catch (_) {}
     return SensorStatus.max30102Pending();
+  }
+
+  @override
+  Future<PreflightResult> runPreflightCheck() async {
+    // 1. Network & reachability check
+    final isReachable = await validateConnection();
+    if (!isReachable) {
+      return PreflightResult.offline();
+    }
+
+    try {
+      // 2. Software health check
+      final healthRes = await apiClient.get('/api/health');
+      final isSoftwareHealthy = healthRes != null && (healthRes['api'] == 'ok' || healthRes['api'] == 'READY');
+
+      // 3. Hardware device status
+      final deviceRes = await apiClient.get('/api/device/status');
+      if (deviceRes == null) {
+        return const PreflightResult(
+          isReachable: true,
+          isSoftwareHealthy: true,
+          isI2cAvailable: false,
+          isAs7341Detected: false,
+          isAs7341Initialized: false,
+          isMax30102Detected: false,
+          isMax30102Initialized: false,
+          isResearchValidated: false,
+          isAcquisitionReady: false,
+          statusMessage: 'Software responding, but hardware status could not be queried.',
+          detailedReason: 'DEVICE_STATUS_UNAVAILABLE',
+        );
+      }
+
+      final maxInfo = deviceRes['max30102'] ?? {};
+      final asInfo = deviceRes['as7341'] ?? {};
+
+      final maxPresent = (maxInfo['present'] ?? maxInfo['detected']) == true;
+      final maxInit = maxInfo['initialized'] == true;
+      final maxReady = maxInfo['research_ready'] == true;
+
+      final asPresent = (asInfo['present'] ?? asInfo['detected']) == true;
+      final asInit = asInfo['initialized'] == true;
+      final asReady = asInfo['research_ready'] == true;
+      final asValidated = asInfo['physically_validated'] == true;
+
+      // I2C communication available if at least one sensor responded on bus 1
+      final isI2cAvailable = maxPresent || asPresent;
+
+      // Research acquisition allowed only if both sensors research_ready
+      final isAcquisitionReady = (healthRes != null && healthRes['acquisition_ready'] == true) ||
+          (maxReady && asReady);
+
+      String msg;
+      if (isAcquisitionReady) {
+        msg = 'HemoPi instrument and sensors are fully validated and ready for research acquisition.';
+      } else {
+        msg = 'HemoPi connected successfully. Measurement acquisition is currently gated because required optical sensor physical validation is pending.';
+      }
+
+      return PreflightResult(
+        isReachable: true,
+        isSoftwareHealthy: isSoftwareHealthy,
+        isI2cAvailable: isI2cAvailable,
+        isAs7341Detected: asPresent,
+        isAs7341Initialized: asInit,
+        isMax30102Detected: maxPresent,
+        isMax30102Initialized: maxInit,
+        isResearchValidated: asValidated,
+        isAcquisitionReady: isAcquisitionReady,
+        statusMessage: msg,
+        detailedReason: healthRes?['reason'] ?? 'VALIDATION_PENDING',
+      );
+    } catch (e) {
+      return PreflightResult(
+        isReachable: true,
+        isSoftwareHealthy: false,
+        isI2cAvailable: false,
+        isAs7341Detected: false,
+        isAs7341Initialized: false,
+        isMax30102Detected: false,
+        isMax30102Initialized: false,
+        isResearchValidated: false,
+        isAcquisitionReady: false,
+        statusMessage: 'Error communicating with HemoPi software services: $e',
+        detailedReason: 'SERVICE_COMMUNICATION_ERROR',
+      );
+    }
   }
 
   @override

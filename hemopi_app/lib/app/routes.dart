@@ -2,6 +2,7 @@ class AppRoutes {
   static const String deviceDiscovery = '/';
   static const String wifiSetup = '/wifi-setup';
   static const String connectionValidation = '/connection-validation';
+  static const String preflightCheck = '/preflight-check';
   static const String dashboard = '/dashboard';
   static const String deviceStatus = '/device-status';
   static const String patientList = '/patients';

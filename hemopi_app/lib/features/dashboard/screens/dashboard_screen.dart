@@ -105,11 +105,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      OutlinedButton.icon(
-                        onPressed: () => Navigator.pushNamed(context, AppRoutes.deviceStatus),
-                        icon: const Icon(Icons.info_outline_rounded, size: 18),
-                        label: const Text('Check Sensor Health'),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => Navigator.pushNamed(context, AppRoutes.preflightCheck),
+                              icon: const Icon(Icons.fact_check_rounded, size: 18),
+                              label: const Text('Check HemoPi'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: isConnected ? const Color(0xFF007A78) : const Color(0xFF64748B),
+                                foregroundColor: Colors.white,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          OutlinedButton.icon(
+                            onPressed: () => Navigator.pushNamed(context, AppRoutes.deviceStatus),
+                            icon: const Icon(Icons.info_outline_rounded, size: 18),
+                            label: const Text('Status'),
+                          ),
+                        ],
                       ),
                     ],
                   ),

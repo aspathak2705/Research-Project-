@@ -40,7 +40,14 @@ class _ConnectionValidationScreenState extends State<ConnectionValidationScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500)),
+          Expanded(
+            child: Text(
+              title,
+              style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+              softWrap: true,
+            ),
+          ),
+          const SizedBox(width: 8),
           if (status == true)
             const StatusBadge(label: 'PASSED', type: BadgeType.success, icon: Icons.check)
           else if (status == false && notCheckedReason != null)

@@ -209,18 +209,34 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                       CustomCard(
                         title: 'Network Host Configuration',
                         subtitle: 'Current target address used by mobile client',
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Expanded(
-                              child: Text(
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFFCBD5E1)),
+                              ),
+                              child: SelectableText(
                                 widget.deviceService?.baseUrl ?? 'http://hemopi.local:8000',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                  fontFamily: 'monospace',
+                                  color: Color(0xFF1E293B),
+                                ),
                               ),
                             ),
-                            OutlinedButton(
-                              onPressed: _showHostConfigDialog,
-                              child: const Text('Change Host'),
+                            const SizedBox(height: 10),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: OutlinedButton.icon(
+                                icon: const Icon(Icons.edit_rounded, size: 16),
+                                onPressed: _showHostConfigDialog,
+                                label: const Text('Change Host'),
+                              ),
                             ),
                           ],
                         ),
