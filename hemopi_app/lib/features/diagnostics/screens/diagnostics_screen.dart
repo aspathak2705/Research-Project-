@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../../core/models/diagnostics_summary.dart';
 import '../../../core/services/diagnostics_service.dart';
@@ -24,10 +25,85 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   bool _isLoading = true;
   String? _error;
 
+  // Technician Actions State
+  final List<String> _technicianActions = const [
+    'Check Backend Health (/api/health)',
+    'Check Network Status (/api/network/status)',
+    'Scan Wi-Fi Networks (/api/network/wifi)',
+    'Check Hardware & I2C (/api/device/status)',
+    'Run Full Diagnostics (/api/diagnostics)',
+  ];
+  String _selectedAction = 'Check Backend Health (/api/health)';
+  bool _isExecutingAction = false;
+  String? _actionConsoleOutput;
+  bool? _actionSuccess;
+
   @override
   void initState() {
     super.initState();
     _loadDiagnostics();
+  }
+
+  Future<void> _executeTechnicianAction() async {
+    setState(() {
+      _isExecutingAction = true;
+      _actionConsoleOutput = 'Executing: $_selectedAction...\nTarget: ${widget.deviceService?.baseUrl ?? "http://hemopi.local:8000"}';
+      _actionSuccess = null;
+    });
+
+    final client = (widget.diagnosticsService is HttpDiagnosticsService)
+        ? (widget.diagnosticsService as HttpDiagnosticsService).apiClient
+        : (widget.deviceService is HttpDeviceService)
+            ? (widget.deviceService as HttpDeviceService).apiClient
+            : null;
+
+    if (client == null) {
+      setState(() {
+        _isExecutingAction = false;
+        _actionConsoleOutput = 'Error: ApiClient instance not found.';
+        _actionSuccess = false;
+      });
+      return;
+    }
+
+    try {
+      dynamic res;
+      if (_selectedAction.contains('/api/health')) {
+        res = await client.get('/api/health');
+      } else if (_selectedAction.contains('/api/network/status')) {
+        res = await client.get('/api/network/status');
+      } else if (_selectedAction.contains('/api/network/wifi')) {
+        res = await client.get('/api/network/wifi');
+      } else if (_selectedAction.contains('/api/device/status')) {
+        res = await client.get('/api/device/status');
+      } else if (_selectedAction.contains('/api/diagnostics')) {
+        res = await client.get('/api/diagnostics');
+      }
+
+      if (mounted) {
+        setState(() {
+          _isExecutingAction = false;
+          _actionSuccess = true;
+          _actionConsoleOutput = 'STATUS: 200 OK\n\n${res != null ? _formatJson(res) : "Empty response received."}';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isExecutingAction = false;
+          _actionSuccess = false;
+          _actionConsoleOutput = 'EXECUTION ERROR:\n$e';
+        });
+      }
+    }
+  }
+
+  String _formatJson(dynamic json) {
+    try {
+      return const JsonEncoder.withIndent('  ').convert(json);
+    } catch (_) {
+      return json.toString();
+    }
   }
 
   Future<void> _loadDiagnostics() async {
@@ -200,6 +276,84 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                               true,
                               'Enforced (Physical Only)',
                             ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Technician Interactive Command Console
+                      CustomCard(
+                        title: 'Technician Actions & API Verification',
+                        subtitle: 'Safe predefined operational queries (no raw shell)',
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            DropdownButtonFormField<String>(
+                              initialValue: _selectedAction,
+                              decoration: const InputDecoration(
+                                labelText: 'Select Diagnostic Action',
+                                border: OutlineInputBorder(),
+                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              ),
+                              isExpanded: true,
+                              items: _technicianActions.map((action) {
+                                return DropdownMenuItem<String>(
+                                  value: action,
+                                  child: Text(
+                                    action,
+                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: _isExecutingAction
+                                  ? null
+                                  : (val) {
+                                      if (val != null) {
+                                        setState(() {
+                                          _selectedAction = val;
+                                        });
+                                      }
+                                    },
+                            ),
+                            const SizedBox(height: 12),
+                            ElevatedButton.icon(
+                              onPressed: _isExecutingAction ? null : _executeTechnicianAction,
+                              icon: _isExecutingAction
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : const Icon(Icons.play_arrow_rounded, size: 18),
+                              label: Text(_isExecutingAction ? 'Executing...' : 'Run Selected Action'),
+                            ),
+                            if (_actionConsoleOutput != null) ...[
+                              const SizedBox(height: 14),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF0F172A),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: _actionSuccess == true
+                                        ? const Color(0xFF10B981)
+                                        : _actionSuccess == false
+                                            ? const Color(0xFFEF4444)
+                                            : const Color(0xFF334155),
+                                  ),
+                                ),
+                                child: SelectableText(
+                                  _actionConsoleOutput!,
+                                  style: const TextStyle(
+                                    color: Color(0xFF38BDF8),
+                                    fontFamily: 'monospace',
+                                    fontSize: 12,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
