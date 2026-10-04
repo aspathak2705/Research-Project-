@@ -18,20 +18,20 @@ This validation protocol characterizies the physical AS7341 8-channel multispect
 
 ---
 
-## 3. Physical Test Execution Sequence
+## 3. Core Physical Validation Protocol Sequence
 
 ### Phase 0: Physical Hardware Preflight Check
-Before data collection, verify the physical environment and device ACK:
+Verify the physical environment, Linux I2C bus 1, and device ACK at `0x39`:
 ```bash
 python -m validation.as7341.device_check
 ```
-*If physical sensor ACK is not received at `0x39`, stop immediately and inspect wiring.*
+*If physical sensor ACK is not received at `0x39`, stop immediately and inspect hardware wiring.*
 
 ---
 
 ### Phase 1: Dark Baseline Acquisition
 1. Cover the sensor optical aperture completely with an opaque light-tight enclosure.
-2. Acquire 30 repeated physical readings:
+2. Acquire 30 repeated physical readings using locked production configuration (200ms, 128x):
 ```bash
 python -m validation.as7341.cli capture --condition DARK --samples 30
 ```
@@ -48,19 +48,38 @@ python -m validation.as7341.cli capture --condition REFERENCE_LIGHT --samples 30
 
 ---
 
-### Phase 3: Controlled Optical Response (Optional / Extended)
-If testing secondary optical conditions:
+### Phase 3: Controlled Optical Response (Core Phase)
+1. Adjust illumination to a second distinct physical state (e.g. different intensity, distance, or filter).
+2. Record physical readings to characterize spectral channel response:
 ```bash
 python -m validation.as7341.cli capture --condition CONTROLLED_RESPONSE --samples 30 --run-dir validation/outputs/<RUN_DIRECTORY>
 ```
 
 ---
 
-### Phase 4: Evidence Package & Report Generation
+### Phase 4: Temporal Stability Characterization
+Record continuous repeated physical acquisitions under steady illumination (e.g., 60 seconds at 250ms interval):
+```bash
+python -m validation.as7341.cli capture --condition TEMPORAL_STABILITY --duration-seconds 60 --interval-ms 250 --run-dir validation/outputs/<RUN_DIRECTORY>
+```
+
+---
+
+### Phase 5: Evidence Analysis & Artifact Compilation
 Run the automated statistical analyzer and evidence generator on the captured physical run:
 ```bash
 python -m validation.as7341.cli analyze --run-dir validation/outputs/<RUN_DIRECTORY>
 ```
+
+---
+
+### Phase 6: Cryptographic Checksum Generation
+Included automatically by the analyzer: produces `SHA256SUMS.txt` for all raw CSVs, manifests, plots, and reports.
+
+---
+
+### Phase 7: Research Human Review
+Review the compiled `report/AS7341_Physical_Validation_Report.md`. Assess channel noise, CV%, drift, and delta response before any research decision.
 
 ---
 

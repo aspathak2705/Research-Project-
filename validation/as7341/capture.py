@@ -18,12 +18,13 @@ from validation.as7341.config import (
     CONDITION_CONTROLLED_RESPONSE,
     CONDITION_DARK,
     CONDITION_REFERENCE_LIGHT,
-    DEFAULT_GAIN,
-    DEFAULT_INTEGRATION_TIME_MS,
+    CONDITION_TEMPORAL_STABILITY,
     DEFAULT_INTERVAL_MS,
     DEFAULT_SAMPLE_COUNT,
     I2C_BUS_ID,
     OUTPUTS_DIR,
+    PRODUCTION_GAIN,
+    PRODUCTION_INTEGRATION_TIME_MS,
     REQUIRED_ADAFRUIT_VERSION,
     SPECTRAL_CHANNELS,
 )
@@ -62,8 +63,9 @@ class PhysicalCaptureEngine:
         condition: str,
         sample_count: int = DEFAULT_SAMPLE_COUNT,
         interval_ms: int = DEFAULT_INTERVAL_MS,
-        integration_time_ms: float = DEFAULT_INTEGRATION_TIME_MS,
-        gain: int = DEFAULT_GAIN,
+        integration_time_ms: float = PRODUCTION_INTEGRATION_TIME_MS,
+        gain: int = PRODUCTION_GAIN,
+        is_experimental: bool = False,
         operator_id: str = "not_recorded",
         setup_notes: str = "not_recorded",
         ambient_notes: str = "not_recorded",
@@ -74,6 +76,7 @@ class PhysicalCaptureEngine:
         self.interval_ms = interval_ms
         self.integration_time_ms = integration_time_ms
         self.gain = gain
+        self.is_experimental = is_experimental
         self.operator_id = operator_id
         self.setup_notes = setup_notes
         self.ambient_notes = ambient_notes
@@ -125,6 +128,7 @@ class PhysicalCaptureEngine:
             "i2c_bus_id": I2C_BUS_ID,
             "timestamp_start": data.get("timestamp_start", datetime.now(timezone.utc).isoformat()),
             "status": status,
+            "configuration_type": "EXPERIMENTAL" if self.is_experimental else "PRODUCTION",
             "operator_id": self.operator_id,
             "setup_notes": self.setup_notes,
             "ambient_notes": self.ambient_notes,
