@@ -38,10 +38,17 @@ class ApiClient {
     http.Client? client,
   }) : _client = client ?? http.Client();
 
+  http.Client get httpClient => _client;
+
+  dynamic parseJson(String body) {
+    if (body.isEmpty) return null;
+    return jsonDecode(body);
+  }
+
   Future<dynamic> get(String endpoint) async {
     final uri = Uri.parse('$baseUrl$endpoint');
     try {
-      final response = await _client.get(uri).timeout(const Duration(seconds: 5));
+      final response = await _client.get(uri).timeout(const Duration(seconds: 4));
       return _handleResponse(response);
     } on TimeoutException {
       throw const ApiException(
@@ -71,7 +78,7 @@ class ApiClient {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(body),
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 8));
       return _handleResponse(response);
     } on TimeoutException {
       throw const ApiException(

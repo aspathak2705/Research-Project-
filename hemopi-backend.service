@@ -1,6 +1,6 @@
 [Unit]
 Description=HemoPi Research Backend API Service
-After=network.target i2c.target
+After=network-online.target time-sync.target
 Wants=network-online.target
 
 [Service]

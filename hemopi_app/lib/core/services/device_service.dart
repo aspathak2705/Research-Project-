@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../models/device_info.dart';
 import '../models/sensor_status.dart';
@@ -35,6 +36,9 @@ class HttpDeviceService implements DeviceService {
 
   Timer? _reconnectTimer;
   bool _isReconnecting = false;
+  bool _isDiscovering = false;
+  int _consecutiveFailures = 0;
+  static const int _maxConsecutiveFailures = 8;
 
   HttpDeviceService({ApiClient? client, LocalDatabaseService? db})
       : apiClient = client ?? ApiClient(),
@@ -45,7 +49,7 @@ class HttpDeviceService implements DeviceService {
 
   @override
   void setBaseUrl(String url) {
-    apiClient.baseUrl = url;
+    apiClient.baseUrl = _normalizeUrl(url);
   }
 
   @override
@@ -53,6 +57,15 @@ class HttpDeviceService implements DeviceService {
 
   @override
   ValueListenable<List<SensorStatus>> get sensorStatusNotifier => _sensorStatuses;
+
+  String _normalizeUrl(String input) {
+    final trimmed = input.trim();
+    if (trimmed.isEmpty) return 'http://hemopi.local:8000';
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+    return 'http://$trimmed:8000';
+  }
 
   @override
   Future<void> pairDevice({
@@ -74,86 +87,188 @@ class HttpDeviceService implements DeviceService {
 
   @override
   Future<void> unpairDevice() async {
+    stopAutoReconnect();
     await dbService.unpairAllDevices();
     _deviceInfo.value = DeviceInfo.unconnected();
+    _consecutiveFailures = 0;
+  }
+
+  Future<Map<String, dynamic>?> _probeCandidate(String candidateUrl, {Duration timeout = const Duration(milliseconds: 2500)}) async {
+    try {
+      final uri = Uri.parse('$candidateUrl/api/health');
+      final client = apiClient.httpClient;
+      final response = await client.get(uri).timeout(timeout);
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final decoded = apiClient.parseJson(response.body);
+        if (decoded is Map<String, dynamic> &&
+            (decoded['api'] == 'ok' || decoded['api'] == 'READY') &&
+            decoded.containsKey('sensors')) {
+          return decoded;
+        }
+      }
+    } catch (_) {
+      // Offline, unreachable, or timed out
+    }
+    return null;
+  }
+
+  Future<String?> _probeSubnetRange(String subnetPrefix, {int port = 8000}) async {
+    const batchSize = 25;
+    for (int start = 1; start <= 254; start += batchSize) {
+      final end = (start + batchSize - 1) > 254 ? 254 : (start + batchSize - 1);
+      final futures = <Future<String?>>[];
+
+      for (int i = start; i <= end; i++) {
+        final candidate = 'http://$subnetPrefix.$i:$port';
+        futures.add(() async {
+          final res = await _probeCandidate(candidate, timeout: const Duration(milliseconds: 700));
+          return res != null ? candidate : null;
+        }());
+      }
+
+      final results = await Future.wait(futures);
+      for (final match in results) {
+        if (match != null) return match;
+      }
+    }
+    return null;
+  }
+
+  Future<String?> _detectLocalSubnetPrefix() async {
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLinkLocal: false,
+      );
+      for (final iface in interfaces) {
+        for (final addr in iface.addresses) {
+          if (!addr.isLoopback && addr.address.contains('.')) {
+            final parts = addr.address.split('.');
+            if (parts.length == 4) {
+              return '${parts[0]}.${parts[1]}.${parts[2]}';
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 
   @override
   Future<bool> discoverDevice({String? hostOrIp}) async {
-    final paired = await getPairedDevice();
+    if (_isDiscovering) return false;
+    _isDiscovering = true;
 
-    List<String> candidateUrls = [];
+    try {
+      final paired = await getPairedDevice();
+      List<String> candidateUrls = [];
 
-    if (hostOrIp != null && hostOrIp.trim().isNotEmpty) {
-      final trimmed = hostOrIp.trim();
-      candidateUrls.add(trimmed.startsWith('http://') || trimmed.startsWith('https://')
-          ? trimmed
-          : 'http://$trimmed:8000');
-    }
-
-    if (paired != null && paired['last_known_host'] != null) {
-      final pairedHost = paired['last_known_host'] as String;
-      final pairedUrl = pairedHost.startsWith('http://') || pairedHost.startsWith('https://')
-          ? pairedHost
-          : 'http://$pairedHost:8000';
-      if (!candidateUrls.contains(pairedUrl)) {
-        candidateUrls.add(pairedUrl);
+      // 1. Manual user host / IP override
+      if (hostOrIp != null && hostOrIp.trim().isNotEmpty) {
+        candidateUrls.add(_normalizeUrl(hostOrIp));
       }
-    }
 
-    // Candidate 1: Standard mDNS hostname on local network (primary discovery mechanism)
-    const defaultMdns = 'http://hemopi.local:8000';
-    if (!candidateUrls.contains(defaultMdns)) candidateUrls.add(defaultMdns);
-
-    // Candidate 2: Optional factory setup AP gateway (used only during initial Wi-Fi provisioning hotspot mode)
-    const setupApGateway = 'http://192.168.4.1:8000';
-    if (!candidateUrls.contains(setupApGateway)) candidateUrls.add(setupApGateway);
-
-    _deviceInfo.value = _deviceInfo.value.copyWith(
-      connectionStatus: ConnectionStateStatus.searching,
-      apiStatus: ApiStateStatus.unavailable,
-      isConnected: false,
-    );
-
-    for (final candidate in candidateUrls) {
-      try {
-        apiClient.baseUrl = candidate;
-        final res = await apiClient.get('/api/health');
-        if (res != null && (res['api'] == 'READY' || res['api'] == 'ok')) {
-          final devId = res['device_id'] ?? (paired?['device_id'] ?? 'HemoPi-001');
-          final devName = res['device_name'] ?? (paired?['device_name'] ?? 'HemoPi Portable Analyzer');
-          final host = res['hostname'] ?? Uri.parse(candidate).host;
-
-          // Automatically remember/update pairing
-          await pairDevice(deviceId: devId, deviceName: devName, host: host);
-
-          _deviceInfo.value = DeviceInfo(
-            deviceId: devId,
-            deviceName: devName,
-            hostname: host,
-            ipAddress: Uri.parse(candidate).host,
-            connectionStatus: ConnectionStateStatus.connected,
-            apiStatus: ApiStateStatus.available,
-            isConnected: true,
-          );
-          return true;
+      // 2. Previously paired host from SQLite cache
+      if (paired != null && paired['last_known_host'] != null) {
+        final pairedHost = paired['last_known_host'] as String;
+        final pairedUrl = _normalizeUrl(pairedHost);
+        if (!candidateUrls.contains(pairedUrl)) {
+          candidateUrls.add(pairedUrl);
         }
-      } catch (_) {
-        // Try next candidate
       }
-    }
 
-    // Not reachable
-    _deviceInfo.value = _deviceInfo.value.copyWith(
-      connectionStatus: paired != null ? ConnectionStateStatus.connectionLost : ConnectionStateStatus.notConfigured,
-      apiStatus: ApiStateStatus.unavailable,
-      isConnected: false,
+      // 3. Current configured base URL
+      final currentBase = apiClient.baseUrl;
+      if (!candidateUrls.contains(currentBase)) {
+        candidateUrls.add(currentBase);
+      }
+
+      // 4. Standard mDNS hostname
+      const defaultMdns = 'http://hemopi.local:8000';
+      if (!candidateUrls.contains(defaultMdns)) {
+        candidateUrls.add(defaultMdns);
+      }
+
+      // 5. Setup Hotspot AP fallback
+      const setupApGateway = 'http://192.168.4.1:8000';
+      if (!candidateUrls.contains(setupApGateway)) {
+        candidateUrls.add(setupApGateway);
+      }
+
+      _deviceInfo.value = _deviceInfo.value.copyWith(
+        connectionStatus: ConnectionStateStatus.searching,
+        apiStatus: ApiStateStatus.unavailable,
+        isConnected: false,
+      );
+
+      // Probe direct candidate endpoints
+      for (final candidate in candidateUrls) {
+        final health = await _probeCandidate(candidate);
+        if (health != null) {
+          return await _handleSuccessfulConnection(candidate, health, paired);
+        }
+      }
+
+      // Controlled fallback: probe local subnet if manual/mDNS candidates did not answer
+      final localSubnet = await _detectLocalSubnetPrefix();
+      if (localSubnet != null && localSubnet != '127.0.0' && localSubnet != '192.168.4') {
+        final discoveredCandidate = await _probeSubnetRange(localSubnet);
+        if (discoveredCandidate != null) {
+          final health = await _probeCandidate(discoveredCandidate);
+          if (health != null) {
+            return await _handleSuccessfulConnection(discoveredCandidate, health, paired);
+          }
+        }
+      }
+
+      // Failed to reach device
+      _consecutiveFailures++;
+      _deviceInfo.value = _deviceInfo.value.copyWith(
+        connectionStatus: paired != null ? ConnectionStateStatus.connectionLost : ConnectionStateStatus.notConfigured,
+        apiStatus: ApiStateStatus.unavailable,
+        isConnected: false,
+      );
+      return false;
+    } finally {
+      _isDiscovering = false;
+    }
+  }
+
+  Future<bool> _handleSuccessfulConnection(
+    String targetUrl,
+    Map<String, dynamic> healthData,
+    Map<String, dynamic>? previousPairing,
+  ) async {
+    apiClient.baseUrl = targetUrl;
+    _consecutiveFailures = 0;
+
+    final devId = healthData['device_id'] ?? (previousPairing?['device_id'] ?? 'HemoPi-001');
+    final devName = healthData['device_name'] ?? (previousPairing?['device_name'] ?? 'HemoPi Portable Analyzer');
+    final host = healthData['hostname'] ?? Uri.parse(targetUrl).host;
+
+    await pairDevice(deviceId: devId, deviceName: devName, host: host);
+
+    _deviceInfo.value = DeviceInfo(
+      deviceId: devId,
+      deviceName: devName,
+      hostname: host,
+      ipAddress: Uri.parse(targetUrl).host,
+      connectionStatus: ConnectionStateStatus.connected,
+      apiStatus: ApiStateStatus.available,
+      isConnected: true,
     );
-    return false;
+    return true;
   }
 
   @override
   Future<bool> validateConnection() async {
+    try {
+      final health = await _probeCandidate(apiClient.baseUrl, timeout: const Duration(seconds: 3));
+      if (health != null) {
+        final paired = await getPairedDevice();
+        return await _handleSuccessfulConnection(apiClient.baseUrl, health, paired);
+      }
+    } catch (_) {}
     return await discoverDevice();
   }
 
@@ -171,7 +286,7 @@ class HttpDeviceService implements DeviceService {
           deviceId: devId,
           deviceName: devName,
           hostname: res['hostname'] ?? 'hemopi.local',
-          hardwareModel: 'Raspberry Pi 4 Model B',
+          hardwareModel: 'Raspberry Pi 3 Model B',
           ipAddress: res['ip_address'] ?? 'Disconnected',
           firmwareVersion: 'v2.0.0-Phase2',
           isConnected: isConn,
@@ -225,18 +340,15 @@ class HttpDeviceService implements DeviceService {
 
   @override
   Future<PreflightResult> runPreflightCheck() async {
-    // 1. Network & reachability check
     final isReachable = await validateConnection();
     if (!isReachable) {
       return PreflightResult.offline();
     }
 
     try {
-      // 2. Software health check
       final healthRes = await apiClient.get('/api/health');
       final isSoftwareHealthy = healthRes != null && (healthRes['api'] == 'ok' || healthRes['api'] == 'READY');
 
-      // 3. Hardware device status
       final deviceRes = await apiClient.get('/api/device/status');
       if (deviceRes == null) {
         return const PreflightResult(
@@ -266,10 +378,7 @@ class HttpDeviceService implements DeviceService {
       final asReady = asInfo['research_ready'] == true;
       final asValidated = asInfo['physically_validated'] == true;
 
-      // I2C communication available if at least one sensor responded on bus 1
       final isI2cAvailable = maxPresent || asPresent;
-
-      // Research acquisition allowed only if both sensors research_ready
       final isAcquisitionReady = (healthRes != null && healthRes['acquisition_ready'] == true) ||
           (maxReady && asReady);
 
@@ -314,9 +423,15 @@ class HttpDeviceService implements DeviceService {
   void startAutoReconnect() {
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer.periodic(const Duration(seconds: 4), (timer) async {
-      if (_isReconnecting) return;
+      if (_isReconnecting || _isDiscovering) return;
 
-      // Only attempt reconnect if we lost connection to a previously paired or configured device
+      if (_consecutiveFailures >= _maxConsecutiveFailures) {
+        _deviceInfo.value = _deviceInfo.value.copyWith(
+          connectionStatus: ConnectionStateStatus.connectionLost,
+        );
+        return;
+      }
+
       final currentStatus = _deviceInfo.value.connectionStatus;
       if (currentStatus == ConnectionStateStatus.connectionLost ||
           currentStatus == ConnectionStateStatus.reconnecting ||

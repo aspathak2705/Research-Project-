@@ -9,5 +9,7 @@ data/temp/
 *.log
 token.json
 credentials.json
+tests
+docs
 
 

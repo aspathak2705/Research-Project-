@@ -19,7 +19,6 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
   @override
   void initState() {
     super.initState();
-    // Start automated background reconnection and perform initial discovery
     widget.deviceService.startAutoReconnect();
     _startDiscovery();
   }
@@ -38,6 +37,82 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
     }
   }
 
+  void _showDirectConnectDialog() {
+    final controller = TextEditingController(
+      text: widget.deviceService.baseUrl.replaceFirst('http://', '').replaceFirst(':8000', ''),
+    );
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Connect by IP / Hostname'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter the Raspberry Pi 3 IP address or custom hostname:',
+              style: TextStyle(fontSize: 13, color: Color(0xFF475569)),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.url,
+              autofocus: true,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'IP Address or Hostname',
+                hintText: '192.168.1.150 or hemopi.local',
+                prefixIcon: Icon(Icons.lan_rounded),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final text = controller.text.trim();
+              Navigator.pop(ctx);
+              if (text.isNotEmpty) {
+                _startDiscovery(hostOrIp: text);
+              }
+            },
+            child: const Text('Connect'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmUnpair() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Unpair Device'),
+        content: const Text(
+          'Are you sure you want to forget this HemoPi device? Stored pairing and address cache will be cleared.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await widget.deviceService.unpairDevice();
+            },
+            child: const Text('Unpair', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showHelpDialog() {
     showDialog(
       context: context,
@@ -48,10 +123,10 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              '1. Power on your HemoPi instrument using its official power adapter.\n\n'
-              '2. First-time setup? Tap "Set Up HemoPi" to connect the instrument to your clinic Wi-Fi.\n\n'
-              '3. After setup, HemoPi securely remembers your Wi-Fi credentials and reconnects automatically every time it is powered on.\n\n'
-              '4. If your clinic uses network device isolation, contact your technician or use Technician Setup.',
+              '1. Power on your Raspberry Pi 3 using an official 5V 2.5A power supply.\n\n'
+              '2. Ensure your phone and Pi 3 are on the same Wi-Fi network (or connect phone to Pi hotspot).\n\n'
+              '3. If automatic discovery cannot find your device due to router isolation, tap "Enter IP Directly" and supply the Pi IP address (e.g. 192.168.1.150).\n\n'
+              '4. Successfully connected devices are remembered automatically.',
               style: TextStyle(height: 1.4),
             ),
           ],
@@ -66,7 +141,7 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
               Navigator.pop(ctx);
               Navigator.pushNamed(context, AppRoutes.diagnostics);
             },
-            child: const Text('Technician Setup'),
+            child: const Text('Technician Diagnostics'),
           ),
         ],
       ),
@@ -100,19 +175,19 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
       case ConnectionStateStatus.connected:
         return 'Paired instrument (${deviceId ?? "HemoPi-001"}) is online and ready for operation.';
       case ConnectionStateStatus.searching:
-        return 'Looking for your paired HemoPi on the local network…';
+        return 'Looking for your paired HemoPi on local Wi-Fi and subnets…';
       case ConnectionStateStatus.found:
-        return 'Found HemoPi. Establishing secure session…';
+        return 'Found HemoPi. Establishing session…';
       case ConnectionStateStatus.connecting:
         return 'Connecting to HemoPi…';
       case ConnectionStateStatus.reconnecting:
         return 'HemoPi connection temporarily interrupted. Reconnecting automatically…';
       case ConnectionStateStatus.connectionLost:
-        return 'Cannot reach paired HemoPi. Ensure the instrument is powered on within Wi-Fi range.';
+        return 'Cannot reach paired HemoPi. Check that Pi is powered on, or tap "Enter IP Directly".';
       case ConnectionStateStatus.setupRequired:
       case ConnectionStateStatus.notConfigured:
       case ConnectionStateStatus.error:
-        return 'If this is your first time using this HemoPi, tap "Set Up HemoPi" to connect it to Wi-Fi.';
+        return 'Tap "Find Nearby HemoPi" or "Enter IP Directly" to connect to your instrument.';
     }
   }
 
@@ -282,7 +357,7 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   const Text('Paired Device:', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-                                  Text(deviceInfo.deviceId, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                  Text('${deviceInfo.deviceId} (${deviceInfo.ipAddress})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                                 ],
                               ),
                             ),
@@ -322,8 +397,13 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
                       ),
                       const SizedBox(height: 10),
                       OutlinedButton(
-                        onPressed: () => Navigator.pushNamed(context, AppRoutes.wifiSetup),
-                        child: const Text('Change Wi-Fi Network'),
+                        onPressed: _showDirectConnectDialog,
+                        child: const Text('Change Target IP / Host'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: _confirmUnpair,
+                        child: const Text('Unpair Device', style: TextStyle(color: Colors.red)),
                       ),
                     ] else ...[
                       ElevatedButton.icon(
@@ -333,12 +413,18 @@ class _DeviceDiscoveryScreenState extends State<DeviceDiscoveryScreen> {
                       ),
                       const SizedBox(height: 10),
                       OutlinedButton.icon(
+                        icon: const Icon(Icons.lan_rounded),
+                        onPressed: _showDirectConnectDialog,
+                        label: const Text('Enter IP Directly'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton.icon(
                         icon: const Icon(Icons.wifi_find_rounded),
                         onPressed: () => Navigator.pushNamed(context, AppRoutes.wifiSetup),
-                        label: const Text('Set Up HemoPi Wi-Fi'),
+                        label: const Text('Wi-Fi Configuration'),
                       ),
                       if (isReconnecting) ...[
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 6),
                         Center(
                           child: Text(
                             'Automatic reconnection active…',

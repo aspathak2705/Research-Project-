@@ -1,13 +1,13 @@
 # HemoPi — Portable Non-Invasive Hemoglobin Research Platform
 
-Integrated biomedical data acquisition system for Raspberry Pi 4 Model B using AMS AS7341 11-channel spectral sensor and Maxim MAX30102 pulse oximetry sensor, connected to a FastAPI backend and Flutter cross-platform companion application.
+Integrated biomedical data acquisition system for Raspberry Pi 3 Model B and Raspberry Pi 4 Model B using AMS AS7341 11-channel spectral sensor and Maxim MAX30102 pulse oximetry sensor, connected to a FastAPI backend and Flutter cross-platform companion application.
 
 ---
 
 ## 1. System Architecture
 
 ```text
-Physical Hardware (Raspberry Pi 4 Model B)
+Physical Hardware (Raspberry Pi 3 Model B / Pi 4 Model B)
 ├── I2C Bus 1 (/dev/i2c-1)
 │   ├── AS7341 (0x39)  <-- adafruit-circuitpython-as7341==1.2.27 (Official Driver)
 │   └── MAX30102 (0x57)<-- smbus2 PPG Driver
@@ -19,8 +19,8 @@ Physical Hardware (Raspberry Pi 4 Model B)
 │   ├── /api/patients        (Subject profile management)
 │   └── /api/sessions        (Acquisition safety gate - HTTP 409 when unvalidated)
 └── Flutter Mobile App (hemopi_app)
-    ├── Device Discovery & Wi-Fi Provisioning
-    ├── Hardware Status Dashboard
+    ├── Multi-Tier Device Discovery (Subnet Scan, mDNS, Direct IP Override, SQLite Pair Cache)
+    ├── Hardware Status Dashboard & Pre-Flight Checks
     └── Patient & Research Workflow Management
 ```
 
@@ -30,7 +30,8 @@ Physical Hardware (Raspberry Pi 4 Model B)
 
 1. **Zero Synthetic Data**: Real hardware measurements only. Fake spectral data, simulated patient readings, and synthetic sensor streams are prohibited.
 2. **Strict Acquisition Gating**: Research sessions are strictly gated until physical calibration and validation are achieved (`physically_validated=false`, `research_ready=false`). Unvalidated sessions return `HTTP 409 ACQUISITION_NOT_READY`.
-3. **Verified Production Drivers**: Custom AS7341 SMUX driver deprecated in favor of official `adafruit-circuitpython-as7341==1.2.27`.
+3. **Separation of Concerns**: API reachability (`api=ok`) is distinct from sensor physical validation. Reachability does not bypass hardware safety checks.
+4. **Verified Production Drivers**: Custom AS7341 SMUX driver deprecated in favor of official `adafruit-circuitpython-as7341==1.2.27`.
 
 ---
 
@@ -39,17 +40,20 @@ Physical Hardware (Raspberry Pi 4 Model B)
 ### Python Environment
 ```bash
 python -m venv .venv
+# Linux / Raspberry Pi:
 source .venv/bin/activate
-pip install -r requirements.txt
+# Windows:
+# .venv\Scripts\activate
+pip install -r backend/requirements.txt
 ```
 
 ### Run Automated Test Suites
 ```bash
-# Core hardware and validator tests
-python -m unittest discover -s tests
+# Core hardware and validator tests (55 tests)
+python -m pytest tests -v
 
-# Backend API endpoint tests
-python -m unittest discover -s backend/tests
+# Backend API endpoint and connectivity tests (14 tests)
+python -m pytest backend/tests -v
 ```
 
 ### Run Flutter Client Tests
@@ -59,6 +63,8 @@ flutter analyze
 flutter test
 ```
 
-### Full Deployment & Operations
-For physical wiring diagrams, systemd deployment, network manager configuration, and troubleshooting steps, refer to:
+---
+
+## 4. Full Deployment & Operations
+For physical wiring diagrams, clean Raspberry Pi 3 OS imaging instructions, systemd deployment, mobile direct IP pairing, and sensor verification steps, refer to:
 [Deployment & Operations Guide](file:///c:/Users/athar/OneDrive/Documents/projects/Research-Project-/docs/deployment_and_operations.md)
