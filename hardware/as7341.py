@@ -54,7 +54,7 @@ class AS7341Sensor:
 
     CHANNEL_KEYS = ("415", "445", "480", "515", "555", "590", "630", "680")
 
-    # Authoritative 20-byte SMUX RAM mappings (addresses 0x00 through 0x13) preserved
+    # Authoritative 20-byte SMUX RAM mappings (addresses 0x00 through 0x13)
     _SMUX_BANK_1 = {
         0x00: 0x30, 0x01: 0x01, 0x02: 0x00, 0x03: 0x00, 0x04: 0x00,
         0x05: 0x42, 0x06: 0x00, 0x07: 0x00, 0x08: 0x50, 0x09: 0x00,
@@ -110,9 +110,10 @@ class AS7341Sensor:
         LOGGER.info("AS7341 initialized at 0x39 via smbus.")
 
     def set_integration_time(self, integration_time_ms: float) -> None:
-        self.integration_time_ms = integration_time_ms
         if integration_time_ms <= 0:
             raise HardwareError("AS7341 integration time must be positive.")
+
+        self.integration_time_ms = integration_time_ms
 
         if self._driver is not None:
             try:
@@ -139,16 +140,16 @@ class AS7341Sensor:
             self._write_u8(self.ASTEP_L, astep & 0xFF)
             self._write_u8(self.ASTEP_H, (astep >> 8) & 0xFF)
 
-    def set_gain(self, gain: int) -> None:
-        self.gain = gain
+    def set_gain(self, gain: int | float) -> None:
         reg_value = self.GAIN_MAP.get(gain)
         if reg_value is None:
             raise HardwareError(f"Unsupported AS7341 gain: {gain}")
 
+        self.gain = gain
+
         if self._driver is not None:
             try:
                 import adafruit_as7341
-                # Map gain value to adafruit_as7341.Gain enum
                 gain_enum_map = {
                     0.5: adafruit_as7341.Gain.GAIN_0_5X,
                     1: adafruit_as7341.Gain.GAIN_1X,
@@ -173,6 +174,8 @@ class AS7341Sensor:
     def read_channels(self) -> dict[str, int]:
         if self._driver is not None:
             try:
+                # Adafruit driver all_channels property returns (F1, F2, F3, F4, F5, F6, F7, F8)
+                # which maps to (415, 445, 480, 515, 555, 590, 630, 680)
                 raw_channels = self._driver.all_channels
                 return {
                     "415": int(raw_channels[0]),
@@ -205,6 +208,7 @@ class AS7341Sensor:
 
     def read_sample(self) -> AS7341Reading:
         channels = self.read_channels()
+        # 16-bit ADC saturation check
         saturated = any(value >= 0xFFF0 for value in channels.values())
         return AS7341Reading(
             channels=channels,
@@ -265,6 +269,8 @@ class AS7341Sensor:
         self._write_u8(self.ENABLE, enable_val | 0x03)
 
         self._last_avalid = self._wait_avalid()
+        if not self._last_avalid:
+            raise HardwareError("AS7341 spectral measurement timed out (AVALID bit remained 0).")
 
         try:
             raw = self._smbus.read_i2c_block_data(self.ADDRESS, self.ASTATUS, 13)

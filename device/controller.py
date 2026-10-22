@@ -51,6 +51,9 @@ class DeviceController:
         self.state = DeviceState.BOOT
 
     def run_session(self, patient_name: str, sample_count: int) -> AcquisitionResult:
+        if sample_count <= 0 or sample_count > 10000:
+            raise ValueError(f"Invalid sample_count: {sample_count}. Must be between 1 and 10000.")
+
         self._transition(DeviceState.SELF_TEST)
         status, msg = self.sensor_manager.self_test()
         if status != SelfTestStatus.SENSOR_READY:
@@ -68,88 +71,94 @@ class DeviceController:
         as_history: list[dict[str, int]] = []
         max_history: list[tuple[int, int]] = []
 
-        for _ in range(sample_count):
-            try:
-                sample = self.sensor_manager.collect(normalized_name)
-            except Exception as exc:
-                LOGGER.error("Sensor collection hardware read failure: %s", exc)
-                raise HardwareError(f"Measurement failed during collection: {exc}") from exc
+        try:
+            for _ in range(sample_count):
+                try:
+                    sample = self.sensor_manager.collect(normalized_name)
+                except Exception as exc:
+                    LOGGER.error("Sensor collection hardware read failure: %s", exc)
+                    raise HardwareError(f"Measurement failed during collection: {exc}") from exc
 
-            max_val = self.max30102_validator.validate_sample(
-                red=sample.max_red,
-                ir=sample.max_ir,
-                finger_detected=sample.finger_detected,
-                overflow_counter=0,
-                history=max_history,
-            )
-
-            as_val = self.as7341_validator.validate_sample(
-                channels=sample.as7341_channels,
-                measurement_complete=True,
-                smux_complete=True,
-                history=as_history,
-            )
-
-            max_history.append((sample.max_red, sample.max_ir))
-            as_history.append(sample.as7341_channels)
-
-            combined_reasons = list(dict.fromkeys(max_val.reasons + as_val.reasons))
-            combined_warnings = list(dict.fromkeys(max_val.warnings + as_val.warnings))
-            sample_valid = max_val.valid and as_val.valid
-
-            evaluated_samples.append(
-                EvaluatedSample(
-                    sample=sample,
-                    valid=sample_valid,
-                    reasons=combined_reasons,
-                    warnings=combined_warnings,
+                max_val = self.max30102_validator.validate_sample(
+                    red=sample.max_red,
+                    ir=sample.max_ir,
+                    finger_detected=sample.finger_detected,
+                    overflow_counter=sample.max30102_overflow_count,
+                    history=max_history,
                 )
+
+                as_val = self.as7341_validator.validate_sample(
+                    channels=sample.as7341_channels,
+                    measurement_complete=sample.as7341_measurement_complete,
+                    smux_complete=sample.as7341_smux_complete,
+                    history=as_history,
+                )
+
+                max_history.append((sample.max_red, sample.max_ir))
+                as_history.append(sample.as7341_channels)
+
+                combined_reasons = list(dict.fromkeys(max_val.reasons + as_val.reasons))
+                combined_warnings = list(dict.fromkeys(max_val.warnings + as_val.warnings))
+                sample_valid = max_val.valid and as_val.valid
+
+                evaluated_samples.append(
+                    EvaluatedSample(
+                        sample=sample,
+                        valid=sample_valid,
+                        reasons=combined_reasons,
+                        warnings=combined_warnings,
+                    )
+                )
+                time.sleep(0.01)
+
+            self._transition(DeviceState.QUALITY_CHECK)
+            session_result = self.session_validator.validate_session(evaluated_samples)
+
+            session_path = self.patient_manager.next_session_path(normalized_name)
+            session_id = session_path.stem
+
+            self._transition(DeviceState.STORE)
+            rejected_file, diag_file = self.diagnostic_storage.save_diagnostics(
+                patient_name=normalized_name,
+                session_id=session_id,
+                result=session_result,
             )
-            time.sleep(0.05)
 
+            valid_csv_file: Path | None = None
+            if session_result.passed:
+                valid_samples = [item.sample for item in session_result.evaluated_samples if item.valid]
+                valid_csv_file = self.csv_storage.write_session(normalized_name, session_path, valid_samples)
+                if self.drive_sync:
+                    self._transition(DeviceState.UPLOAD)
+                    self.drive_sync.enqueue(normalized_name, valid_csv_file)
+            else:
+                LOGGER.warning(
+                    "Session quality validation failed for patient %s. Reasons: %s",
+                    normalized_name,
+                    session_result.reasons,
+                )
 
-        self._transition(DeviceState.QUALITY_CHECK)
-        session_result = self.session_validator.validate_session(evaluated_samples)
+            self._transition(DeviceState.READY)
 
-        session_path = self.patient_manager.next_session_path(normalized_name)
-        session_id = session_path.stem
+            if not session_result.passed:
+                raise SignalQualityError(
+                    f"Session failed quality validation ({session_result.valid_samples}/{session_result.attempted_samples} valid samples). "
+                    f"Reasons: {'; '.join(session_result.reasons)}"
+                )
 
-        self._transition(DeviceState.STORE)
-        rejected_file, diag_file = self.diagnostic_storage.save_diagnostics(
-            patient_name=normalized_name,
-            session_id=session_id,
-            result=session_result,
-        )
-
-        valid_csv_file: Path | None = None
-        if session_result.passed:
-            valid_samples = [item.sample for item in session_result.evaluated_samples if item.valid]
-            valid_csv_file = self.csv_storage.write_session(normalized_name, session_path, valid_samples)
-            if self.drive_sync:
-                self._transition(DeviceState.UPLOAD)
-                self.drive_sync.enqueue(normalized_name, valid_csv_file)
-        else:
-            LOGGER.warning(
-                "Session quality validation failed for patient %s. Reasons: %s",
-                normalized_name,
-                session_result.reasons,
+            return AcquisitionResult(
+                patient_name=normalized_name,
+                session_file=valid_csv_file,
+                diagnostic_file=diag_file,
+                rejected_file=rejected_file,
+                session_result=session_result,
             )
-
-        self._transition(DeviceState.READY)
-
-        if not session_result.passed:
-            raise SignalQualityError(
-                f"Session failed quality validation ({session_result.valid_samples}/{session_result.attempted_samples} valid samples). "
-                f"Reasons: {'; '.join(session_result.reasons)}"
-            )
-
-        return AcquisitionResult(
-            patient_name=normalized_name,
-            session_file=valid_csv_file,
-            diagnostic_file=diag_file,
-            rejected_file=rejected_file,
-            session_result=session_result,
-        )
+        finally:
+            # Always ensure sensors are closed / reset safely on exit or error
+            try:
+                self.sensor_manager.close()
+            except Exception as exc:
+                LOGGER.warning("Error closing sensor manager: %s", exc)
 
     def _transition(self, new_state: DeviceState) -> None:
         LOGGER.info("State %s -> %s", self.state.value, new_state.value)
@@ -159,4 +168,3 @@ class DeviceController:
     def _require(condition: bool, message: str) -> None:
         if not condition:
             raise RuntimeError(message)
-

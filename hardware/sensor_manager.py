@@ -3,14 +3,12 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
+from enum import Enum
 
 from hardware.as7341 import AS7341Sensor
 from hardware.max30102 import MAX30102Sensor
 
 LOGGER = logging.getLogger(__name__)
-
-
-from enum import Enum
 
 
 class SelfTestStatus(Enum):
@@ -37,6 +35,10 @@ class UnifiedSample:
     MAX30102_IR: int
     finger_detected: bool
     as7341_saturated: bool
+    as7341_measurement_complete: bool = True
+    as7341_smux_complete: bool = True
+    max30102_overflow_count: int = 0
+    max30102_fresh: bool = True
 
     @property
     def max_red(self) -> int:
@@ -102,9 +104,10 @@ class SensorManager:
         return False
 
     def collect(self, patient: str) -> UnifiedSample:
-        max_sample = self.max30102.read_sample()
+        max_reading = self.max30102.read_sample_reading()
         as_sample = self.as7341.read_sample()
         channels = as_sample.channels
+
         return UnifiedSample(
             timestamp=time.time(),
             patient=patient,
@@ -116,13 +119,16 @@ class SensorManager:
             AS7341_590nm=channels["590"],
             AS7341_630nm=channels["630"],
             AS7341_680nm=channels["680"],
-            MAX30102_RED=max_sample["red"],
-            MAX30102_IR=max_sample["ir"],
-            finger_detected=self.max30102.finger_detected(),
+            MAX30102_RED=max_reading.red,
+            MAX30102_IR=max_reading.ir,
+            finger_detected=max_reading.finger_detected,
             as7341_saturated=as_sample.saturated,
+            as7341_measurement_complete=as_sample.measurement_complete,
+            as7341_smux_complete=as_sample.smux_complete,
+            max30102_overflow_count=max_reading.overflow_count,
+            max30102_fresh=max_reading.fresh,
         )
 
     def close(self) -> None:
         self.max30102.close()
         self.as7341.close()
-
