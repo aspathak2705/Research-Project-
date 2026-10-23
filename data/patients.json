@@ -285,5 +285,12 @@
     "sex": "Female",
     "notes": "Research participant",
     "created_at": "2026-10-23T17:39:38.633415"
+  },
+  {
+    "patient_id": "TEST_PATIENT_1792757851646",
+    "age": 28,
+    "sex": "Female",
+    "notes": "Research participant",
+    "created_at": "2026-10-23T17:47:31.653804"
   }
 ]

@@ -20,7 +20,7 @@ def scan_wifi():
 
 @router.post("/wifi/connect", response_model=WifiConnectResponse)
 def connect_wifi(req: WifiConnectRequest):
-    return NetworkManagerService.connect_wifi(req.ssid, req.password)
+    return NetworkManagerService.connect_wifi(req.ssid, req.password, pin=req.pin)
 
 @router.post("/wifi/disconnect", response_model=WifiDisconnectResponse)
 def disconnect_wifi():

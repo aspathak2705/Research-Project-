@@ -1,0 +1,17 @@
+[Unit]
+Description=HemoPi Autonomous Wi-Fi Recovery & Setup Hotspot Watchdog
+After=NetworkManager.service network.target
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/pi/Research-Project-
+ExecStart=/home/pi/Research-Project-/.venv/bin/python tools/hemopi_network_watchdog.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

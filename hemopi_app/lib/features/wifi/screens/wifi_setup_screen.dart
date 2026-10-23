@@ -169,9 +169,14 @@ class _WifiSetupScreenState extends State<WifiSetupScreen> {
                           setState(() => _connectingSsid = null);
 
                           if (result.success) {
+                            // If new IP returned, update base URL and trigger discovery
+                            if (result.ipAddress != null && widget.deviceService != null) {
+                              widget.deviceService!.setBaseUrl('http://${result.ipAddress}:8000');
+                            }
+
                             scaffoldMessenger.showSnackBar(
                               SnackBar(
-                                content: Text('Connected to ${network.ssid}'),
+                                content: Text('HemoPi joining ${network.ssid}… Reconnecting…'),
                                 backgroundColor: AppColors.statusSuccess,
                               ),
                             );

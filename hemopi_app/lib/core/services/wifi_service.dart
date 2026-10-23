@@ -17,7 +17,7 @@ class WifiConnectResult {
 
 abstract class WifiService {
   Future<List<WifiNetwork>> getAvailableNetworks();
-  Future<WifiConnectResult> connectToNetwork(String ssid, String password);
+  Future<WifiConnectResult> connectToNetwork(String ssid, String password, {String? pin});
 }
 
 class HttpWifiService implements WifiService {
@@ -53,12 +53,17 @@ class HttpWifiService implements WifiService {
   }
 
   @override
-  Future<WifiConnectResult> connectToNetwork(String ssid, String password) async {
+  Future<WifiConnectResult> connectToNetwork(String ssid, String password, {String? pin}) async {
     try {
-      final res = await apiClient.post('/api/network/wifi/connect', {
+      final Map<String, dynamic> body = {
         'ssid': ssid,
         'password': password,
-      });
+      };
+      if (pin != null && pin.trim().isNotEmpty) {
+        body['pin'] = pin.trim();
+      }
+
+      final res = await apiClient.post('/api/network/wifi/connect', body);
 
       if (res != null) {
         final status = res['status'] ?? 'error';
@@ -75,7 +80,9 @@ class HttpWifiService implements WifiService {
           );
         } else {
           String userMsg;
-          if (code == 'INVALID_CREDENTIALS') {
+          if (code == 'UNAUTHORIZED') {
+            userMsg = 'Invalid device setup PIN. Check the code on the HemoPi label.';
+          } else if (code == 'INVALID_CREDENTIALS') {
             userMsg = 'Incorrect Wi-Fi password. Check credentials and try again.';
           } else if (code == 'SSID_NOT_FOUND') {
             userMsg = 'Wi-Fi network was not found or out of range.';

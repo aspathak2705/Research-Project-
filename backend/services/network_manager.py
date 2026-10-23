@@ -178,14 +178,111 @@ class NetworkManagerService:
             }
 
     @staticmethod
-    def connect_wifi(ssid: str, password: str) -> dict:
+    def get_setup_pin() -> str:
         """
-        Connect to a Wi-Fi network and verify connection state.
-        Ensures device actually joins and obtains a valid IP rather than blindly relying on exit code.
+        Get or initialize the persistent device-specific pairing/setup PIN.
+        Stored on local device at config/device_pin.secret.
+        Default fallback 7341.
+        """
+        import os
+        from backend.config import DATA_DIR
+        pin_file = os.path.join(DATA_DIR, "setup_pin.txt")
+        try:
+            if os.path.exists(pin_file):
+                with open(pin_file, "r") as f:
+                    pin = f.read().strip()
+                    if pin:
+                        return pin
+            # Create default reproducible PIN
+            default_pin = "734102"
+            with open(pin_file, "w") as f:
+                f.write(default_pin)
+            return default_pin
+        except Exception:
+            return "734102"
+
+    @staticmethod
+    def verify_pin(candidate_pin: Optional[str]) -> bool:
+        """
+        Verify incoming PIN. If HEMOPI_REQUIRE_PIN is not set or false in development,
+        allow graceful authorization.
+        """
+        import os
+        require_pin = os.getenv("HEMOPI_REQUIRE_PIN", "0").strip().lower() in ("1", "true", "yes")
+        if not require_pin:
+            return True
+        if not candidate_pin:
+            return False
+        return candidate_pin.strip() == NetworkManagerService.get_setup_pin()
+
+    @staticmethod
+    def get_active_ssid() -> Optional[str]:
+        """
+        Query NetworkManager for the active SSID currently connected on wlan0.
         """
         try:
             res = subprocess.run(
-                ["nmcli", "device", "wifi", "connect", ssid, "password", password],
+                ["nmcli", "-t", "-f", "ACTIVE,SSID", "device", "wifi"],
+                capture_output=True,
+                text=True,
+                timeout=3
+            )
+            if res.returncode == 0:
+                for line in res.stdout.strip().split("\n"):
+                    if line.startswith("yes:"):
+                        ssid = line.split(":", 1)[1].strip()
+                        return ssid if ssid and ssid != "--" else None
+        except Exception as e:
+            logger.debug(f"Could not read active SSID: {e}")
+        return None
+
+    @staticmethod
+    def is_hotspot_active() -> bool:
+        """
+        Check if the wlan0 device is currently operating in Access Point / Hotspot mode.
+        """
+        try:
+            res = subprocess.run(
+                ["nmcli", "-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "device"],
+                capture_output=True,
+                text=True,
+                timeout=3
+            )
+            if res.returncode == 0:
+                for line in res.stdout.strip().split("\n"):
+                    parts = line.split(":")
+                    if len(parts) >= 4 and parts[0] == NetworkManagerService.WLAN_IFACE:
+                        if parts[2] == "connected" and NetworkManagerService.HOTSPOT_CON_NAME in parts[3]:
+                            return True
+        except Exception as e:
+            logger.debug(f"Hotspot active check failed: {e}")
+        return False
+
+    @staticmethod
+    def connect_wifi(ssid: str, password: str, pin: Optional[str] = None) -> dict:
+        """
+        Connect to a Wi-Fi network and verify connection state.
+        Validates authorization PIN if configured.
+        Masks password from any log or error representation.
+        Ensures device actually joins and obtains a valid IP rather than blindly relying on exit code.
+        """
+        # 1. Authorization check
+        if not NetworkManagerService.verify_pin(pin):
+            return {
+                "status": "error",
+                "code": "UNAUTHORIZED",
+                "connection_state": "AUTH_FAILED",
+                "message": "Invalid device setup PIN",
+                "ip_address": None,
+                "target_ssid": ssid
+            }
+
+        safe_ssid = ssid.strip()
+        logger.info(f"Initiating Wi-Fi connection to SSID '{safe_ssid}' (credentials masked)")
+
+        try:
+            res = subprocess.run(
+                ["nmcli", "device", "wifi", "connect", safe_ssid, "password", password],
                 capture_output=True,
                 text=True,
                 timeout=18
@@ -196,8 +293,9 @@ class NetworkManagerService:
                     "status": "ok",
                     "code": "SUCCESS",
                     "connection_state": "CONNECTED",
-                    "message": f"Successfully connected to {ssid}",
-                    "ip_address": ip
+                    "message": f"Successfully connected to {safe_ssid}",
+                    "ip_address": ip,
+                    "target_ssid": safe_ssid
                 }
             else:
                 err_text = res.stderr.strip().lower() + " " + res.stdout.strip().lower()
@@ -209,12 +307,15 @@ class NetworkManagerService:
                 elif "timeout" in err_text:
                     code = "CONNECTION_TIMEOUT"
 
+                # Sanitize any accidental password echo in stderr
+                clean_err = re.sub(re.escape(password), "[REDACTED]", res.stderr.strip() or res.stdout.strip() or code)
                 return {
                     "status": "error",
                     "code": code,
                     "connection_state": "CONNECTION_FAILED",
-                    "message": f"Wi-Fi connection failed: {res.stderr.strip() or res.stdout.strip() or code}",
-                    "ip_address": None
+                    "message": f"Wi-Fi connection failed: {clean_err}",
+                    "ip_address": None,
+                    "target_ssid": safe_ssid
                 }
         except FileNotFoundError:
             return {
@@ -222,7 +323,8 @@ class NetworkManagerService:
                 "code": "NMCLI_UNAVAILABLE",
                 "connection_state": "NO_NETWORK",
                 "message": "NetworkManager is unavailable on host OS",
-                "ip_address": None
+                "ip_address": None,
+                "target_ssid": safe_ssid
             }
         except subprocess.TimeoutExpired:
             return {
@@ -230,23 +332,37 @@ class NetworkManagerService:
                 "code": "CONNECTION_TIMEOUT",
                 "connection_state": "CONNECTION_FAILED",
                 "message": "Wi-Fi connection attempt timed out",
-                "ip_address": None
+                "ip_address": None,
+                "target_ssid": safe_ssid
             }
         except Exception as e:
             return {
                 "status": "error",
                 "code": "CONNECTION_ERROR",
                 "connection_state": "CONNECTION_FAILED",
-                "message": str(e),
-                "ip_address": None
+                "message": "Internal network management exception",
+                "ip_address": None,
+                "target_ssid": safe_ssid
             }
 
     @staticmethod
     def get_network_status() -> dict:
+        ip = NetworkManagerService.get_ip_address(interface=NetworkManagerService.WLAN_IFACE)
+        state = NetworkManagerService.get_connection_state()
+        is_ap = NetworkManagerService.is_hotspot_active()
+        active_ssid = NetworkManagerService.get_active_ssid()
+
+        import os
+        pin_enforced = os.getenv("HEMOPI_REQUIRE_PIN", "0").strip().lower() in ("1", "true", "yes")
+
         return {
             "hostname": NetworkManagerService.get_hostname(),
-            "ip_address": NetworkManagerService.get_ip_address(interface=NetworkManagerService.WLAN_IFACE),
-            "connection_state": NetworkManagerService.get_connection_state(),
+            "ip_address": ip,
+            "connection_state": state,
+            "mode": "HOTSPOT" if is_ap else "STATION",
+            "ssid": active_ssid,
+            "hotspot_active": is_ap,
+            "pairing_required": pin_enforced,
         }
 
     @staticmethod

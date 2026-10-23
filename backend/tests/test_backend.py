@@ -168,5 +168,48 @@ class TestBackendEndpoints(unittest.TestCase):
         ip = NetworkManagerService.get_ip_address(interface="wlan0")
         self.assertEqual(ip, "192.168.1.150")
 
+    @patch("subprocess.run")
+    def test_wifi_connect_authorization_pin(self, mock_run):
+        import os
+        from backend.services.network_manager import NetworkManagerService
+        os.environ["HEMOPI_REQUIRE_PIN"] = "1"
+        try:
+            # 1. Invalid PIN rejected
+            res = self.client.post("/api/network/wifi/connect", json={
+                "ssid": "Clinic_LAN",
+                "password": "secretpassword",
+                "pin": "000000"
+            })
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(res.json()["code"], "UNAUTHORIZED")
+
+            # 2. Valid PIN accepted
+            mock_run.return_value = subprocess.CompletedProcess(
+                args=["nmcli"],
+                returncode=0,
+                stdout="Connection successfully activated\n"
+            )
+            correct_pin = NetworkManagerService.get_setup_pin()
+            res = self.client.post("/api/network/wifi/connect", json={
+                "ssid": "Clinic_LAN",
+                "password": "secretpassword",
+                "pin": correct_pin
+            })
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(res.json()["status"], "ok")
+        finally:
+            os.environ["HEMOPI_REQUIRE_PIN"] = "0"
+
+    @patch("subprocess.run")
+    def test_hotspot_active_detection(self, mock_run):
+        from backend.services.network_manager import NetworkManagerService
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["nmcli"],
+            returncode=0,
+            stdout="wlan0:wifi:connected:HemoPi-Setup-Hotspot\neth0:ethernet:unavailable:--\n"
+        )
+        is_ap = NetworkManagerService.is_hotspot_active()
+        self.assertTrue(is_ap)
+
 if __name__ == "__main__":
     unittest.main()
