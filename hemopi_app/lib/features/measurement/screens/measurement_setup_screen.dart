@@ -9,6 +9,15 @@ import '../../../shared/widgets/clinical_detail_row.dart';
 import '../../../app/design_tokens.dart';
 import '../../../app/routes.dart';
 
+enum MeasurementReadinessState {
+  checking,
+  disconnected,
+  validationPending,
+  sensorMissing,
+  ready,
+  unknownError,
+}
+
 class MeasurementSetupScreen extends StatefulWidget {
   final Patient? patient;
   final DeviceService deviceService;
@@ -26,10 +35,7 @@ class MeasurementSetupScreen extends StatefulWidget {
 }
 
 class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
-  bool _isCheckingHardware = true;
-  bool _hardwareReady = false;
-  bool _instrumentConnected = false;
-  String _hardwareStatusText = 'Checking sensor hardware…';
+  MeasurementReadinessState _readinessState = MeasurementReadinessState.checking;
 
   @override
   void initState() {
@@ -39,43 +45,45 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
 
   Future<void> _checkHardwarePreflight() async {
     setState(() {
-      _isCheckingHardware = true;
+      _readinessState = MeasurementReadinessState.checking;
     });
 
     try {
       final status = await widget.deviceService.getSensorStatus();
-      if (mounted) {
-        final ready = status.max30102Present &&
-            status.as7341Present &&
-            status.as7341ResearchReady &&
-            status.as7341PhysicallyValidated;
+      if (!mounted) return;
+
+      final ready = status.max30102Present &&
+          status.as7341Present &&
+          status.as7341ResearchReady &&
+          status.as7341PhysicallyValidated;
+
+      if (!status.max30102Present || !status.as7341Present) {
         setState(() {
-          _instrumentConnected = status.max30102Present || status.as7341Present;
-          _hardwareReady = ready;
-          if (!status.max30102Present || !status.as7341Present) {
-            _hardwareStatusText =
-                'One or more physical sensors are not detected. Verify sensor connections on the HemoPi instrument.';
-          } else if (!status.as7341ResearchReady || !status.as7341PhysicallyValidated) {
-            _hardwareStatusText =
-                'Measurement is currently unavailable because the optical sensor has not completed the required physical validation.';
-          } else {
-            _hardwareStatusText =
-                'All sensors detected and verified. Ready for research acquisition.';
-          }
-          _isCheckingHardware = false;
+          _readinessState = MeasurementReadinessState.sensorMissing;
+        });
+      } else if (!status.as7341ResearchReady || !status.as7341PhysicallyValidated) {
+        setState(() {
+          _readinessState = MeasurementReadinessState.validationPending;
+        });
+      } else if (ready) {
+        setState(() {
+          _readinessState = MeasurementReadinessState.ready;
+        });
+      } else {
+        setState(() {
+          _readinessState = MeasurementReadinessState.validationPending;
         });
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _instrumentConnected = false;
-          _hardwareReady = false;
-          _hardwareStatusText = 'Unable to communicate with HemoPi. Check that the device is switched on and connected.';
-          _isCheckingHardware = false;
-        });
-      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _readinessState = MeasurementReadinessState.disconnected;
+      });
     }
   }
+
+  bool get _isReadyForAcquisition =>
+      _readinessState == MeasurementReadinessState.ready && widget.patient != null;
 
   @override
   Widget build(BuildContext context) {
@@ -88,7 +96,7 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Patient Selection / Overview
+            // Section A: Patient Card
             CustomCard(
               title: 'Patient',
               subtitle: widget.patient != null ? 'Subject: ${widget.patient!.patientId}' : 'No patient selected',
@@ -100,14 +108,14 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'A registered patient must be chosen before taking a measurement.',
+                          'Select or register a patient before continuing with the measurement.',
                           style: TextStyle(fontSize: 13, color: AppColors.textMuted),
                         ),
                         const SizedBox(height: AppSpacing.sm),
                         OutlinedButton.icon(
                           onPressed: () => Navigator.pushNamed(context, AppRoutes.patientList),
                           icon: const Icon(Icons.people_outline, size: 18),
-                          label: const Text('Select or Add Patient'),
+                          label: const Text('Select Patient'),
                         ),
                       ],
                     )
@@ -132,88 +140,19 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
             ),
             const SizedBox(height: AppSpacing.md),
 
-            // Hardware Preflight Checklist
-            CustomCard(
-              title: 'Hardware Readiness Check',
-              subtitle: 'Automated pre-measurement verification',
-              trailing: StatusBadge(
-                label: _isCheckingHardware
-                    ? 'Checking…'
-                    : (_hardwareReady ? 'Ready' : 'Gated'),
-                type: _isCheckingHardware
-                    ? BadgeType.validating
-                    : (_hardwareReady ? BadgeType.ready : BadgeType.warning),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildCheckItem(
-                    'HemoPi Connection',
-                    _instrumentConnected,
-                    'Instrument online and responding',
-                    'Instrument unreachable on network',
-                  ),
-                  const Divider(height: 16),
-                  _buildCheckItem(
-                    'Pulse & PPG Sensor',
-                    _instrumentConnected,
-                    'Pulse sensor detected and initialized',
-                    'Pulse sensor not detected',
-                  ),
-                  const Divider(height: 16),
-                  _buildCheckItem(
-                    'Multispectral Optical Sensor',
-                    _instrumentConnected,
-                    'Spectral sensor detected (Validation Pending)',
-                    'Optical sensor not detected',
-                    warning: true,
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Container(
-                    padding: const EdgeInsets.all(AppSpacing.sm),
-                    decoration: BoxDecoration(
-                      color: _hardwareReady ? AppColors.statusSuccessBg : AppColors.statusWarningBg,
-                      borderRadius: BorderRadius.circular(AppRadii.md),
-                      border: Border.all(
-                        color: _hardwareReady ? AppColors.statusSuccessBorder : AppColors.statusWarningBorder,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _hardwareReady ? Icons.check_circle_rounded : Icons.info_outline_rounded,
-                          color: _hardwareReady ? AppColors.statusSuccess : AppColors.statusWarning,
-                          size: 20,
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: Text(
-                            _hardwareStatusText,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: _hardwareReady ? AppColors.statusSuccess : const Color(0xFF92400E),
-                              height: 1.35,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            // Section B: Measurement Availability Notice (Single compact notice)
+            _buildAvailabilityNotice(),
             const SizedBox(height: AppSpacing.md),
 
-            // Practical Clinical Instructions
+            // Section C: Preparation Instructions (3 concise steps)
             const CustomCard(
               title: 'Measurement Preparation',
-              subtitle: 'Subject placement instructions',
+              subtitle: 'Patient instructions',
               child: Column(
                 children: [
                   _InstructionRow(
                     step: '1',
-                    text: 'Ask subject to sit comfortably and rest hand on a stable, flat surface.',
+                    text: 'Ask the patient to sit comfortably and rest their hand on a stable, flat surface.',
                   ),
                   SizedBox(height: AppSpacing.sm),
                   _InstructionRow(
@@ -223,18 +162,18 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
                   SizedBox(height: AppSpacing.sm),
                   _InstructionRow(
                     step: '3',
-                    text: 'Instruct subject to remain relaxed and avoid talking or moving during recording.',
+                    text: 'Instruct the patient to remain still and relaxed during recording.',
                   ),
                 ],
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
 
-            // Start Measurement Button
+            // Section D: Primary Action
             ElevatedButton.icon(
               icon: const Icon(Icons.play_arrow_rounded, size: 22),
               label: const Text('Start Measurement'),
-              onPressed: (_hardwareReady && !_isCheckingHardware && widget.patient != null)
+              onPressed: _isReadyForAcquisition
                   ? () {
                       Navigator.pushNamed(
                         context,
@@ -246,12 +185,12 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
                     }
                   : null,
             ),
-            if (!_hardwareReady) ...[
+            if (!_isReadyForAcquisition) ...[
               const SizedBox(height: AppSpacing.xs),
-              const Center(
+              Center(
                 child: Text(
-                  'Button is disabled until sensor validation is completed on the instrument.',
-                  style: TextStyle(fontSize: 12, color: AppColors.textDisabled),
+                  _getDisabledActionHint(),
+                  style: const TextStyle(fontSize: 12, color: AppColors.textDisabled),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -263,31 +202,170 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
     );
   }
 
-  Widget _buildCheckItem(String title, bool ok, String okText, String failText, {bool warning = false}) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(
-          ok ? (warning ? Icons.info_rounded : Icons.check_circle_rounded) : Icons.cancel_rounded,
-          size: 18,
-          color: ok ? (warning ? AppColors.statusWarning : AppColors.statusSuccess) : AppColors.statusError,
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.textPrimary)),
-              const SizedBox(height: 2),
-              Text(
-                ok ? okText : failText,
-                style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-              ),
-            ],
+  Widget _buildAvailabilityNotice() {
+    switch (_readinessState) {
+      case MeasurementReadinessState.checking:
+        return _buildNoticeCard(
+          icon: Icons.sync_rounded,
+          iconColor: AppColors.primary,
+          title: 'Checking instrument',
+          message: 'Please wait while the instrument is checked.',
+          bgColor: AppColors.primaryContainer,
+          borderColor: AppColors.primaryLight,
+          textColor: AppColors.primaryDark,
+          isLoading: true,
+        );
+
+      case MeasurementReadinessState.disconnected:
+        return _buildNoticeCard(
+          icon: Icons.wifi_off_rounded,
+          iconColor: AppColors.statusError,
+          title: 'Instrument unavailable',
+          message: 'HemoPi is not connected. Check the instrument connection or Wi-Fi network.',
+          bgColor: AppColors.statusErrorBg,
+          borderColor: AppColors.statusErrorBorder,
+          textColor: const Color(0xFF991B1B),
+          onRetry: _checkHardwarePreflight,
+        );
+
+      case MeasurementReadinessState.sensorMissing:
+        return _buildNoticeCard(
+          icon: Icons.warning_amber_rounded,
+          iconColor: AppColors.statusWarning,
+          title: 'Instrument not detected',
+          message: 'One or more sensors are not responding. Verify sensor connections or consult technician diagnostics.',
+          bgColor: AppColors.statusWarningBg,
+          borderColor: AppColors.statusWarningBorder,
+          textColor: const Color(0xFF92400E),
+          onRetry: _checkHardwarePreflight,
+        );
+
+      case MeasurementReadinessState.validationPending:
+        return _buildNoticeCard(
+          icon: Icons.info_outline_rounded,
+          iconColor: AppColors.statusWarning,
+          title: 'Measurement not yet available',
+          message: 'The instrument needs to complete its required validation before a measurement can be taken.',
+          bgColor: AppColors.statusWarningBg,
+          borderColor: AppColors.statusWarningBorder,
+          textColor: const Color(0xFF92400E),
+          onRetry: _checkHardwarePreflight,
+        );
+
+      case MeasurementReadinessState.ready:
+        return _buildNoticeCard(
+          icon: Icons.check_circle_outline_rounded,
+          iconColor: AppColors.statusSuccess,
+          title: 'Ready for measurement',
+          message: 'The instrument is ready. You can continue when the patient is prepared.',
+          bgColor: AppColors.statusSuccessBg,
+          borderColor: AppColors.statusSuccessBorder,
+          textColor: const Color(0xFF14532D),
+        );
+
+      case MeasurementReadinessState.unknownError:
+        return _buildNoticeCard(
+          icon: Icons.info_outline_rounded,
+          iconColor: AppColors.statusWarning,
+          title: 'Status unavailable',
+          message: 'Could not determine instrument readiness. Check device connection.',
+          bgColor: AppColors.statusWarningBg,
+          borderColor: AppColors.statusWarningBorder,
+          textColor: const Color(0xFF92400E),
+          onRetry: _checkHardwarePreflight,
+        );
+    }
+  }
+
+  Widget _buildNoticeCard({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String message,
+    required Color bgColor,
+    required Color borderColor,
+    required Color textColor,
+    bool isLoading = false,
+    VoidCallback? onRetry,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(AppRadii.md),
+        border: Border.all(color: borderColor, width: 1.0),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2.0),
+            child: isLoading
+                ? SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: iconColor),
+                  )
+                : Icon(icon, color: iconColor, size: 20),
           ),
-        ),
-      ],
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: textColor,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  message,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: textColor.withValues(alpha: 0.95),
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (onRetry != null && !isLoading) ...[
+            const SizedBox(width: AppSpacing.xs),
+            IconButton(
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              tooltip: 'Retry status check',
+              color: textColor,
+              onPressed: onRetry,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+          ],
+        ],
+      ),
     );
+  }
+
+  String _getDisabledActionHint() {
+    if (widget.patient == null) {
+      return 'Please select a patient before starting a measurement.';
+    }
+    switch (_readinessState) {
+      case MeasurementReadinessState.checking:
+        return 'Waiting for instrument check to complete…';
+      case MeasurementReadinessState.disconnected:
+        return 'Instrument is disconnected.';
+      case MeasurementReadinessState.validationPending:
+      case MeasurementReadinessState.sensorMissing:
+        return 'Measurement is disabled until required validation is completed.';
+      case MeasurementReadinessState.unknownError:
+        return 'Instrument readiness cannot be confirmed.';
+      case MeasurementReadinessState.ready:
+        return '';
+    }
   }
 }
 

@@ -55,7 +55,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: AppSpacing.md),
 
-            // Instrument Readiness Card
+            // Instrument Connection Summary Card (Truthful and clear)
             ValueListenableBuilder<DeviceInfo>(
               valueListenable: widget.deviceService.deviceInfoNotifier,
               builder: (context, info, _) {
@@ -64,8 +64,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   title: 'HemoPi Instrument',
                   subtitle: isConnected ? 'Online on local clinic network' : 'Not reachable on network',
                   trailing: StatusBadge(
-                    label: isConnected ? 'Online' : 'Attention Required',
-                    type: isConnected ? BadgeType.ready : BadgeType.warning,
+                    label: isConnected ? 'Connected' : 'Not Connected',
+                    type: isConnected ? BadgeType.connected : BadgeType.warning,
                   ),
                   child: Column(
                     children: [
@@ -80,7 +80,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Expanded(
                             child: Text(
                               isConnected
-                                  ? 'Instrument connected. Ready to prepare patient measurement.'
+                                  ? 'Instrument connected. Validation status verified before measurement.'
                                   : 'Connect this phone and HemoPi to the same clinic Wi-Fi network.',
                               style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
                             ),

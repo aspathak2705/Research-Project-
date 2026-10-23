@@ -118,5 +118,55 @@ class TestBackendEndpoints(unittest.TestCase):
         self.assertIn("status", data)
         self.assertIn("code", data)
 
+    @patch("subprocess.run")
+    def test_network_connection_state_parsing_exact(self, mock_run):
+        # 1. State 'disconnected' must not be misparsed as 'connected'
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["nmcli"],
+            returncode=0,
+            stdout="STATE         CONNECTIVITY  WIFI-HW  WIFI     WWAN-HW  WWAN\ndisconnected  none          enabled  enabled  missing  enabled\n"
+        )
+        from backend.services.network_manager import NetworkManagerService
+        state = NetworkManagerService.get_connection_state()
+        self.assertEqual(state, "DISCONNECTED")
+
+        # 2. State 'connected'
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["nmcli"],
+            returncode=0,
+            stdout="STATE      CONNECTIVITY  WIFI-HW  WIFI     WWAN-HW  WWAN\nconnected  full          enabled  enabled  missing  enabled\n"
+        )
+        self.assertEqual(NetworkManagerService.get_connection_state(), "CONNECTED")
+
+    @patch("subprocess.run")
+    def test_wifi_scan_ssid_with_colons_and_escapes(self, mock_run):
+        # nmcli with -e yes escapes colons in SSIDs as \:
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["nmcli"],
+            returncode=0,
+            stdout="Clinic\\:Guest:75:WPA2 802.1X\nSimpleWiFi:90:WPA2\n--:40:WPA2\n"
+        )
+        from backend.services.network_manager import NetworkManagerService
+        result = NetworkManagerService.list_wifi_networks()
+        self.assertEqual(result["status"], "ok")
+        networks = result["networks"]
+        self.assertEqual(len(networks), 2)
+        self.assertEqual(networks[0]["ssid"], "Clinic:Guest")
+        self.assertEqual(networks[0]["signal_strength"], 75)
+        self.assertTrue(networks[0]["secured"])
+        self.assertEqual(networks[1]["ssid"], "SimpleWiFi")
+
+    @patch("subprocess.run")
+    def test_interface_specific_ip_retrieval(self, mock_run):
+        # Test interface specific query returns wlan0 IP without loopback
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["nmcli"],
+            returncode=0,
+            stdout="192.168.1.150/24\n"
+        )
+        from backend.services.network_manager import NetworkManagerService
+        ip = NetworkManagerService.get_ip_address(interface="wlan0")
+        self.assertEqual(ip, "192.168.1.150")
+
 if __name__ == "__main__":
     unittest.main()
