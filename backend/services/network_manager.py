@@ -200,8 +200,16 @@ class NetworkManagerService:
                         return pin
             # Generate cryptographically secure 6-digit PIN
             generated_pin = f"{secrets.randbelow(900000) + 100000}"
-            with open(pin_file, "w") as f:
+            # Create file with restrictive 0600 permissions
+            flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+            mode = 0o600
+            fd = os.open(pin_file, flags, mode)
+            with os.fdopen(fd, "w") as f:
                 f.write(generated_pin)
+            try:
+                os.chmod(pin_file, 0o600)
+            except Exception:
+                pass
             return generated_pin
         except Exception:
             return "734102"
