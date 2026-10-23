@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/preflight_result.dart';
 import '../../../core/services/device_service.dart';
+import '../../../shared/widgets/custom_card.dart';
 import '../../../shared/widgets/status_badge.dart';
+import '../../../shared/widgets/clinical_scaffold.dart';
+import '../../../app/design_tokens.dart';
 import '../../../app/routes.dart';
 
 class PreflightCheckScreen extends StatefulWidget {
@@ -52,14 +55,14 @@ class _PreflightCheckScreenState extends State<PreflightCheckScreen> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Color(0xFF1E293B)),
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   status == null
                       ? 'Checking component…'
                       : (status ? passedText : failedText),
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                 ),
               ],
             ),
@@ -79,10 +82,9 @@ class _PreflightCheckScreenState extends State<PreflightCheckScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final res = _result;
 
-    return Scaffold(
+    return ClinicalScaffold(
       appBar: AppBar(
         title: const Text('HemoPi Readiness Check'),
         actions: [
@@ -93,146 +95,124 @@ class _PreflightCheckScreenState extends State<PreflightCheckScreen> {
           ),
         ],
       ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            _isLoading
-                                ? Icons.sync_rounded
-                                : (res != null && res.isReachable
-                                    ? Icons.verified_rounded
-                                    : Icons.warning_amber_rounded),
-                            size: 24,
-                            color: _isLoading
-                                ? theme.colorScheme.primary
-                                : (res != null && res.isReachable
-                                    ? const Color(0xFF0D8A58)
-                                    : const Color(0xFFDC2626)),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              _isLoading
-                                  ? 'Checking your instrument…'
-                                  : (res != null && res.isReachable
-                                      ? 'HemoPi Communication Verified'
-                                      : 'Instrument Offline'),
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        _isLoading
-                          ? 'Running physical baseline checks across communication bus and biomedical sensors…'
-                          : (res?.statusMessage ?? 'Check completed.'),
-                        style: const TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.4),
-                      ),
-                    ],
-                  ),
+      body: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            CustomCard(
+              title: _isLoading
+                  ? 'Checking instrument…'
+                  : (res != null && res.isReachable
+                      ? 'HemoPi Communication Verified'
+                      : 'Instrument Offline'),
+              subtitle: _isLoading
+                  ? 'Running physical baseline checks across communication bus and sensors…'
+                  : (res?.statusMessage ?? 'Check completed.'),
+              trailing: Icon(
+                _isLoading
+                    ? Icons.sync_rounded
+                    : (res != null && res.isReachable
+                        ? Icons.verified_rounded
+                        : Icons.warning_amber_rounded),
+                size: 24,
+                color: _isLoading
+                    ? AppColors.primary
+                    : (res != null && res.isReachable
+                        ? AppColors.statusSuccess
+                        : AppColors.statusError),
+              ),
+              child: const SizedBox.shrink(),
+            ),
+            const SizedBox(height: AppSpacing.md),
+
+            Expanded(
+              child: Card(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+                  children: [
+                    _buildCheckRow(
+                      title: '1. HemoPi Reachability',
+                      status: _isLoading ? null : res?.isReachable,
+                      passedText: 'Instrument responding over network',
+                      failedText: 'Instrument unreachable',
+                    ),
+                    const Divider(height: 1),
+                    _buildCheckRow(
+                      title: '2. Software Service Health',
+                      status: _isLoading ? null : res?.isSoftwareHealthy,
+                      passedText: 'HemoPi software running normally',
+                      failedText: 'Software service not responding',
+                    ),
+                    const Divider(height: 1),
+                    _buildCheckRow(
+                      title: '3. Sensor Communication Bus',
+                      status: _isLoading ? null : res?.isI2cAvailable,
+                      passedText: 'Sensor communication active',
+                      failedText: 'Bus offline or no sensor acknowledgment',
+                    ),
+                    const Divider(height: 1),
+                    _buildCheckRow(
+                      title: '4. Multispectral Optical Sensor',
+                      status: _isLoading ? null : res?.isAs7341Detected,
+                      passedText: 'Optical sensor detected & active',
+                      failedText: 'Optical sensor not responding',
+                    ),
+                    const Divider(height: 1),
+                    _buildCheckRow(
+                      title: '5. Optical Sensor Initialization',
+                      status: _isLoading ? null : res?.isAs7341Initialized,
+                      passedText: 'Internal registers & channels initialized',
+                      failedText: 'Initialization failed',
+                    ),
+                    const Divider(height: 1),
+                    _buildCheckRow(
+                      title: '6. Pulse & PPG Sensor',
+                      status: _isLoading ? null : res?.isMax30102Detected,
+                      passedText: 'Pulse sensor detected & active',
+                      failedText: 'Pulse sensor not responding',
+                    ),
+                    const Divider(height: 1),
+                    _buildCheckRow(
+                      title: '7. Pulse Sensor Initialization',
+                      status: _isLoading ? null : res?.isMax30102Initialized,
+                      passedText: 'FIFO buffer & LEDs initialized',
+                      failedText: 'Initialization failed',
+                    ),
+                    const Divider(height: 1),
+                    _buildCheckRow(
+                      title: '8. Research Acquisition Gate',
+                      status: _isLoading ? null : res?.isAcquisitionReady,
+                      passedText: 'Acquisition unlocked for research',
+                      failedText: 'Physical validation pending (acquisition gated)',
+                      isWarning: true,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 16),
+            ),
 
-              Expanded(
-                child: Card(
-                  child: ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                    children: [
-                      _buildCheckRow(
-                        title: '1. HemoPi Reachability',
-                        status: _isLoading ? null : res?.isReachable,
-                        passedText: 'Instrument responding over network',
-                        failedText: 'Instrument unreachable',
-                      ),
-                      const Divider(height: 1),
-                      _buildCheckRow(
-                        title: '2. Software Service Health',
-                        status: _isLoading ? null : res?.isSoftwareHealthy,
-                        passedText: 'HemoPi software running normally',
-                        failedText: 'Software service not responding',
-                      ),
-                      const Divider(height: 1),
-                      _buildCheckRow(
-                        title: '3. Sensor Communication Bus',
-                        status: _isLoading ? null : res?.isI2cAvailable,
-                        passedText: 'Sensor communication active',
-                        failedText: 'Bus offline or no sensor acknowledgment',
-                      ),
-                      const Divider(height: 1),
-                      _buildCheckRow(
-                        title: '4. Multispectral Optical Sensor',
-                        status: _isLoading ? null : res?.isAs7341Detected,
-                        passedText: 'Optical sensor detected & active',
-                        failedText: 'Optical sensor not responding',
-                      ),
-                      const Divider(height: 1),
-                      _buildCheckRow(
-                        title: '5. Optical Sensor Initialization',
-                        status: _isLoading ? null : res?.isAs7341Initialized,
-                        passedText: 'Internal registers & channels initialized',
-                        failedText: 'Initialization failed',
-                      ),
-                      const Divider(height: 1),
-                      _buildCheckRow(
-                        title: '6. Pulse & PPG Sensor',
-                        status: _isLoading ? null : res?.isMax30102Detected,
-                        passedText: 'Pulse sensor detected & active',
-                        failedText: 'Pulse sensor not responding',
-                      ),
-                      const Divider(height: 1),
-                      _buildCheckRow(
-                        title: '7. Pulse Sensor Initialization',
-                        status: _isLoading ? null : res?.isMax30102Initialized,
-                        passedText: 'FIFO buffer & LEDs initialized',
-                        failedText: 'Initialization failed',
-                      ),
-                      const Divider(height: 1),
-                      _buildCheckRow(
-                        title: '8. Research Acquisition Gate',
-                        status: _isLoading ? null : res?.isAcquisitionReady,
-                        passedText: 'Acquisition unlocked for research',
-                        failedText: 'Physical validation pending (acquisition gated)',
-                        isWarning: true,
-                      ),
-                    ],
+            const SizedBox(height: AppSpacing.md),
+
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pushNamed(context, AppRoutes.diagnostics),
+                    child: const Text('View Technician Details'),
                   ),
                 ),
-              ),
-
-              const SizedBox(height: 16),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pushNamed(context, AppRoutes.diagnostics),
-                      child: const Text('View Technician Details'),
-                    ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Done'),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Done'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xs),
+          ],
         ),
       ),
     );

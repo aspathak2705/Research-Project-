@@ -4,6 +4,9 @@ import '../../../core/services/device_service.dart';
 import '../../../core/services/measurement_service.dart';
 import '../../../shared/widgets/custom_card.dart';
 import '../../../shared/widgets/status_badge.dart';
+import '../../../shared/widgets/clinical_scaffold.dart';
+import '../../../shared/widgets/clinical_detail_row.dart';
+import '../../../app/design_tokens.dart';
 import '../../../app/routes.dart';
 
 class MeasurementSetupScreen extends StatefulWidget {
@@ -67,7 +70,7 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
         setState(() {
           _instrumentConnected = false;
           _hardwareReady = false;
-          _hardwareStatusText = 'Unable to communicate with HemoPi. Check that the device is switched on.';
+          _hardwareStatusText = 'Unable to communicate with HemoPi. Check that the device is switched on and connected.';
           _isCheckingHardware = false;
         });
       }
@@ -76,12 +79,12 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ClinicalScaffold(
       appBar: AppBar(
         title: const Text('Start Measurement'),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -91,16 +94,16 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
               subtitle: widget.patient != null ? 'Subject: ${widget.patient!.patientId}' : 'No patient selected',
               trailing: widget.patient != null
                   ? const StatusBadge(label: 'Selected', type: BadgeType.ready)
-                  : const StatusBadge(label: 'Action Required', type: BadgeType.warning),
+                  : const StatusBadge(label: 'Required', type: BadgeType.warning),
               child: widget.patient == null
                   ? Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
                           'A registered patient must be chosen before taking a measurement.',
-                          style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                          style: TextStyle(fontSize: 13, color: AppColors.textMuted),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: AppSpacing.sm),
                         OutlinedButton.icon(
                           onPressed: () => Navigator.pushNamed(context, AppRoutes.patientList),
                           icon: const Icon(Icons.people_outline, size: 18),
@@ -110,25 +113,24 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
                     )
                   : Column(
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text('Age', style: TextStyle(color: Color(0xFF64748B), fontSize: 13)),
-                            Text('${widget.patient!.age ?? "N/A"} years', style: const TextStyle(fontWeight: FontWeight.w600)),
-                          ],
+                        ClinicalDetailRow(
+                          label: 'Patient ID',
+                          value: widget.patient!.patientId,
                         ),
-                        const SizedBox(height: 6),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text('Sex', style: TextStyle(color: Color(0xFF64748B), fontSize: 13)),
-                            Text(widget.patient!.sex ?? 'Unspecified', style: const TextStyle(fontWeight: FontWeight.w600)),
-                          ],
+                        const Divider(),
+                        ClinicalDetailRow(
+                          label: 'Age',
+                          value: widget.patient!.age != null ? '${widget.patient!.age} years' : 'Not recorded',
+                        ),
+                        const Divider(),
+                        ClinicalDetailRow(
+                          label: 'Biological Sex',
+                          value: widget.patient!.sex ?? 'Unspecified',
                         ),
                       ],
                     ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.md),
 
             // Hardware Preflight Checklist
             CustomCard(
@@ -166,27 +168,30 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
                     'Optical sensor not detected',
                     warning: true,
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: AppSpacing.sm),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(AppSpacing.sm),
                     decoration: BoxDecoration(
-                      color: _hardwareReady ? const Color(0xFFE8F5E9) : const Color(0xFFFEF3C7),
-                      borderRadius: BorderRadius.circular(10),
+                      color: _hardwareReady ? AppColors.statusSuccessBg : AppColors.statusWarningBg,
+                      borderRadius: BorderRadius.circular(AppRadii.md),
+                      border: Border.all(
+                        color: _hardwareReady ? AppColors.statusSuccessBorder : AppColors.statusWarningBorder,
+                      ),
                     ),
                     child: Row(
                       children: [
                         Icon(
                           _hardwareReady ? Icons.check_circle_rounded : Icons.info_outline_rounded,
-                          color: _hardwareReady ? const Color(0xFF0D8A58) : const Color(0xFFD97706),
+                          color: _hardwareReady ? AppColors.statusSuccess : AppColors.statusWarning,
                           size: 20,
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: AppSpacing.sm),
                         Expanded(
                           child: Text(
                             _hardwareStatusText,
                             style: TextStyle(
                               fontSize: 12,
-                              color: _hardwareReady ? const Color(0xFF0D8A58) : const Color(0xFF92400E),
+                              color: _hardwareReady ? AppColors.statusSuccess : const Color(0xFF92400E),
                               height: 1.35,
                               fontWeight: FontWeight.w500,
                             ),
@@ -198,7 +203,7 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.md),
 
             // Practical Clinical Instructions
             const CustomCard(
@@ -210,12 +215,12 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
                     step: '1',
                     text: 'Ask subject to sit comfortably and rest hand on a stable, flat surface.',
                   ),
-                  SizedBox(height: 10),
+                  SizedBox(height: AppSpacing.sm),
                   _InstructionRow(
                     step: '2',
                     text: 'Place index finger firmly over the sensor opening without pressing excessively.',
                   ),
-                  SizedBox(height: 10),
+                  SizedBox(height: AppSpacing.sm),
                   _InstructionRow(
                     step: '3',
                     text: 'Instruct subject to remain relaxed and avoid talking or moving during recording.',
@@ -223,7 +228,7 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: AppSpacing.lg),
 
             // Start Measurement Button
             ElevatedButton.icon(
@@ -242,16 +247,16 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
                   : null,
             ),
             if (!_hardwareReady) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: AppSpacing.xs),
               const Center(
                 child: Text(
                   'Button is disabled until sensor validation is completed on the instrument.',
-                  style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                  style: TextStyle(fontSize: 12, color: AppColors.textDisabled),
                   textAlign: TextAlign.center,
                 ),
               ),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.md),
           ],
         ),
       ),
@@ -265,18 +270,18 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
         Icon(
           ok ? (warning ? Icons.info_rounded : Icons.check_circle_rounded) : Icons.cancel_rounded,
           size: 18,
-          color: ok ? (warning ? const Color(0xFFD97706) : const Color(0xFF0D8A58)) : const Color(0xFFDC2626),
+          color: ok ? (warning ? AppColors.statusWarning : AppColors.statusSuccess) : AppColors.statusError,
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF1E293B))),
+              Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.textPrimary)),
               const SizedBox(height: 2),
               Text(
                 ok ? okText : failText,
-                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
               ),
             ],
           ),
@@ -302,23 +307,23 @@ class _InstructionRow extends StatelessWidget {
           height: 22,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: const Color(0xFFE0F2F1),
-            borderRadius: BorderRadius.circular(6),
+            color: AppColors.primaryLight,
+            borderRadius: BorderRadius.circular(AppRadii.sm),
           ),
           child: Text(
             step,
             style: const TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 12,
-              color: Color(0xFF007A78),
+              color: AppColors.primary,
             ),
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.35),
+            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.35),
           ),
         ),
       ],

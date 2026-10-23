@@ -3,6 +3,11 @@ import '../../../core/services/patient_service.dart';
 import '../../../core/services/session_service.dart';
 import '../../../core/services/report_service.dart';
 import '../../../shared/widgets/custom_card.dart';
+import '../../../shared/widgets/clinical_scaffold.dart';
+import '../../../shared/widgets/clinical_notice_banner.dart';
+import '../../../shared/widgets/clinical_detail_row.dart';
+import '../../../shared/widgets/clinical_confirm_dialog.dart';
+import '../../../app/design_tokens.dart';
 
 class LocalStorageManagementScreen extends StatefulWidget {
   final PatientService patientService;
@@ -48,25 +53,15 @@ class _LocalStorageManagementScreenState extends State<LocalStorageManagementScr
   }
 
   Future<void> _confirmClearData() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear Local Android Data?'),
-        content: const Text(
-          'WARNING: This will permanently delete all locally stored research subjects, session metadata, CSV files, and generated reports from this Android device. This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Clear All Data'),
-          ),
-        ],
-      ),
+    final confirm = await ClinicalConfirmDialog.show(
+      context,
+      title: 'Clear Local Storage?',
+      message:
+          'This will permanently delete all locally stored research subjects, session metadata, CSV records, and generated reports from this device. This operation is irreversible.',
+      confirmLabel: 'Clear All Data',
+      cancelLabel: 'Keep Data',
+      isDestructive: true,
+      icon: Icons.delete_forever_rounded,
     );
 
     if (confirm == true) {
@@ -74,7 +69,10 @@ class _LocalStorageManagementScreenState extends State<LocalStorageManagementScr
       await _loadMetrics();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Local Android data cleared successfully.')),
+          const SnackBar(
+            content: Text('Local data cleared successfully.'),
+            backgroundColor: AppColors.statusSuccess,
+          ),
         );
       }
     }
@@ -82,70 +80,61 @@ class _LocalStorageManagementScreenState extends State<LocalStorageManagementScr
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ClinicalScaffold(
       appBar: AppBar(
-        title: const Text('Local Data & Storage Management'),
+        title: const Text('Settings & Local Storage'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Refresh Storage Metrics',
             onPressed: _loadMetrics,
           ),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   CustomCard(
-                    title: 'Android Local Storage Ownership',
-                    subtitle: 'Local SQLite & Document Directory Status',
+                    title: 'Local Storage Ownership',
+                    subtitle: 'Local SQLite and document directory status',
                     child: Column(
                       children: [
-                        _buildMetricRow('Registered Subjects', '$_patientCount'),
-                        _buildMetricRow('Acquisition Sessions', '$_sessionCount'),
-                        _buildMetricRow('Generated Reports', '$_reportCount'),
-                        _buildMetricRow('Storage Location', 'App Documents Directory'),
+                        ClinicalDetailRow(label: 'Registered Patients', value: '$_patientCount'),
+                        const Divider(),
+                        ClinicalDetailRow(label: 'Recorded Sessions', value: '$_sessionCount'),
+                        const Divider(),
+                        ClinicalDetailRow(label: 'Saved Reports', value: '$_reportCount'),
+                        const Divider(),
+                        const ClinicalDetailRow(label: 'Storage Location', value: 'App Documents Directory'),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  const CustomCard(
-                    title: 'Data Privacy & Ownership Notice',
-                    subtitle: 'No Cloud Sync Policy',
-                    child: Text(
-                      'All research data is strictly stored locally on this Android client. The Raspberry Pi backend serves as a hardware sensor provider and does NOT act as a permanent source of truth for patient records or measurement CSVs.',
-                      style: TextStyle(fontSize: 13, color: Colors.black87),
-                    ),
+                  const SizedBox(height: AppSpacing.md),
+
+                  const ClinicalNoticeBanner.info(
+                    title: 'Local Privacy Policy',
+                    message:
+                        'All research patient data and measurement recordings remain strictly on this local device. The Raspberry Pi backend serves solely as a hardware sensor interface and does not retain permanent clinical records.',
                   ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-                      icon: const Icon(Icons.delete_forever),
-                      label: const Text('Clear All Local Android Data'),
-                      onPressed: _confirmClearData,
+                  const SizedBox(height: AppSpacing.xl),
+
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.statusError,
+                      side: const BorderSide(color: AppColors.statusErrorBorder),
                     ),
+                    icon: const Icon(Icons.delete_forever_rounded),
+                    label: const Text('Clear All Local Data'),
+                    onPressed: _confirmClearData,
                   ),
+                  const SizedBox(height: AppSpacing.md),
                 ],
               ),
             ),
-    );
-  }
-
-  Widget _buildMetricRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.black54)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
-        ],
-      ),
     );
   }
 }

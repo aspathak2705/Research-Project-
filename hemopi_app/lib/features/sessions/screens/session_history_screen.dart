@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/measurement_session.dart';
 import '../../../core/services/session_service.dart';
+import '../../../shared/widgets/clinical_scaffold.dart';
+import '../../../shared/widgets/status_badge.dart';
+import '../../../shared/widgets/state_view.dart';
+import '../../../app/design_tokens.dart';
 import '../../../app/routes.dart';
 
 class SessionHistoryScreen extends StatefulWidget {
@@ -52,7 +56,7 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ClinicalScaffold(
       appBar: AppBar(
         title: const Text('Previous Sessions'),
         actions: [
@@ -64,89 +68,53 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
           : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(32.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.error_outline_rounded, size: 48, color: Color(0xFFDC2626)),
-                        const SizedBox(height: 16),
-                        Text(_error!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 15)),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _loadSessions,
-                          child: const Text('Try Again'),
-                        ),
-                      ],
-                    ),
-                  ),
+              ? StateView(
+                  icon: Icons.error_outline_rounded,
+                  iconColor: AppColors.statusError,
+                  title: 'Unable to Load Sessions',
+                  description: _error!,
+                  actionLabel: 'Try Again',
+                  onAction: _loadSessions,
                 )
               : _sessions.isEmpty
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(32.0),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFF1F5F9),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.history_toggle_off_rounded, size: 48, color: Color(0xFF64748B)),
-                            ),
-                            const SizedBox(height: 20),
-                            const Text(
-                              'No Previous Sessions',
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Completed patient acquisition recordings will appear here.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Color(0xFF64748B)),
-                            ),
-                            const SizedBox(height: 20),
-                            ElevatedButton.icon(
-                              onPressed: () => Navigator.pushNamed(context, AppRoutes.measurementSetup),
-                              icon: const Icon(Icons.play_arrow_rounded),
-                              label: const Text('New Measurement'),
-                            ),
-                          ],
-                        ),
-                      ),
+                  ? const StateView(
+                      icon: Icons.history_toggle_off_rounded,
+                      title: 'No Recorded Sessions',
+                      description: 'Initiate a new measurement to begin recording research sessions.',
                     )
                   : ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
                       itemCount: _sessions.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.xs),
                       itemBuilder: (context, index) {
                         final session = _sessions[index];
                         final dateStr = session.createdAt.toIso8601String().replaceAll('T', ' ').substring(0, 16);
 
                         return Card(
                           child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 6),
                             leading: CircleAvatar(
-                              backgroundColor: const Color(0xFFE0F2FE),
-                              child: const Icon(Icons.sensors_rounded, color: Color(0xFF0284C7)),
+                              backgroundColor: AppColors.primaryLight,
+                              child: const Icon(Icons.show_chart_rounded, color: AppColors.primary),
                             ),
                             title: Text(
-                              'Patient: ${session.patientId}',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF1E293B)),
+                              session.sessionId,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
                             ),
                             subtitle: Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
+                              padding: const EdgeInsets.only(top: 2.0),
                               child: Text(
-                                '$dateStr  •  ${session.validSamples} valid / ${session.attemptedSamples} total',
-                                style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                                'Subject: ${session.patientId}  •  $dateStr\nValid: ${session.validSamples} / ${session.attemptedSamples}',
+                                style: const TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.3),
                               ),
                             ),
-                            trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                            trailing: StatusBadge(
+                              label: session.status.name.toUpperCase(),
+                              type: session.validSamples > 0 ? BadgeType.success : BadgeType.warning,
+                            ),
+                            isThreeLine: true,
                             onTap: () {
                               Navigator.pushNamed(
                                 context,

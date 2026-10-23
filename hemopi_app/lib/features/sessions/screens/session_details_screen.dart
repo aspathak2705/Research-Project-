@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import '../../../core/models/measurement_session.dart';
 import '../../../shared/widgets/custom_card.dart';
 import '../../../shared/widgets/status_badge.dart';
+import '../../../shared/widgets/clinical_scaffold.dart';
+import '../../../shared/widgets/clinical_notice_banner.dart';
+import '../../../shared/widgets/clinical_detail_row.dart';
+import '../../../app/design_tokens.dart';
 
 class SessionDetailsScreen extends StatelessWidget {
   final MeasurementSession session;
@@ -13,69 +17,67 @@ class SessionDetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ClinicalScaffold(
       appBar: AppBar(
         title: Text('Session ${session.sessionId}'),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             CustomCard(
-              title: 'Session Details',
-              subtitle: 'Recorded Session Identifier: ${session.sessionId}',
+              title: 'Session Profile',
+              subtitle: 'Subject: ${session.patientId}',
               trailing: StatusBadge(
                 label: session.status.name.toUpperCase(),
-                type: session.validSamples > 0 ? BadgeType.success : BadgeType.info,
+                type: session.validSamples > 0 ? BadgeType.success : BadgeType.warning,
               ),
               child: Column(
                 children: [
-                  _buildRow('Subject Identifier', session.patientId),
-                  const Divider(height: 16),
-                  _buildRow('Created At', session.createdAt.toIso8601String().replaceAll('T', ' ').substring(0, 19)),
-                  const Divider(height: 16),
-                  _buildRow('Total Samples Attempted', '${session.attemptedSamples}'),
-                  const Divider(height: 16),
-                  _buildRow('Valid Sensor Readings', '${session.validSamples}'),
-                  const Divider(height: 16),
-                  _buildRow('Rejected Readings', '${session.rejectedSamples}'),
-                  const Divider(height: 16),
-                  _buildRow('Acquisition State', session.validationStatus),
-                  const Divider(height: 16),
-                  _buildRow('Stored CSV File', session.localValidCsvFile ?? 'Pending session validation'),
+                  ClinicalDetailRow(label: 'Session ID', value: session.sessionId),
+                  const Divider(),
+                  ClinicalDetailRow(label: 'Patient ID', value: session.patientId),
+                  const Divider(),
+                  ClinicalDetailRow(
+                    label: 'Recorded Time',
+                    value: session.createdAt.toIso8601String().replaceAll('T', ' ').substring(0, 19),
+                  ),
+                  const Divider(),
+                  ClinicalDetailRow(label: 'Sensor Readiness', value: session.sensorReadinessState),
+                  const Divider(),
+                  ClinicalDetailRow(label: 'Attempted Samples', value: '${session.attemptedSamples}'),
+                  const Divider(),
+                  ClinicalDetailRow(label: 'Valid Samples', value: '${session.validSamples}'),
+                  const Divider(),
+                  ClinicalDetailRow(label: 'Rejected Samples', value: '${session.rejectedSamples}'),
+                  const Divider(),
+                  ClinicalDetailRow(label: 'Validation Status', value: session.validationStatus),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            const CustomCard(
-              title: 'Offline Storage Notice',
-              subtitle: 'Local Client Persistence',
-              child: Text(
-                'Session records and research data are secured in offline local storage on this Android device. All readings originate strictly from physical hardware acquisition.',
-                style: TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.4),
-              ),
+            const SizedBox(height: AppSpacing.md),
+
+            const ClinicalNoticeBanner(
+              title: 'Investigational Record',
+              message:
+                  'Session records reflect non-invasive sensor acquisition data collected under clinical study protocols.',
             ),
+            const SizedBox(height: AppSpacing.md),
+
+            if (session.errorMessage != null && session.errorMessage!.isNotEmpty) ...[
+              CustomCard(
+                title: 'Recorded Issue',
+                subtitle: session.errorCode ?? 'Acquisition Diagnostic Note',
+                child: Text(
+                  session.errorMessage!,
+                  style: const TextStyle(fontSize: 13, color: AppColors.statusError, height: 1.4),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+            ],
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w500, color: Color(0xFF64748B), fontSize: 13)),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B), fontSize: 13),
-            ),
-          ),
-        ],
       ),
     );
   }

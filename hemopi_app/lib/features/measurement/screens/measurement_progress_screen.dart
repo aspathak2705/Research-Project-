@@ -5,6 +5,10 @@ import '../../../core/models/measurement_session.dart';
 import '../../../core/services/measurement_service.dart';
 import '../../../shared/widgets/custom_card.dart';
 import '../../../shared/widgets/status_badge.dart';
+import '../../../shared/widgets/clinical_scaffold.dart';
+import '../../../shared/widgets/clinical_notice_banner.dart';
+import '../../../shared/widgets/clinical_confirm_dialog.dart';
+import '../../../app/design_tokens.dart';
 import '../../../app/routes.dart';
 
 class MeasurementProgressScreen extends StatefulWidget {
@@ -41,6 +45,25 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
     super.dispose();
   }
 
+  Future<bool> _handleWillPop() async {
+    if (!_isAcquiring) return true;
+    final confirmed = await ClinicalConfirmDialog.show(
+      context,
+      title: 'Cancel Active Measurement?',
+      message:
+          'Measurement acquisition is actively running. If you leave now, this recording session will be cancelled and discarded. No result will be saved.',
+      confirmLabel: 'Cancel Recording',
+      cancelLabel: 'Keep Measuring',
+      isDestructive: true,
+      icon: Icons.warning_amber_rounded,
+    );
+    if (confirmed == true) {
+      _timer?.cancel();
+      return true;
+    }
+    return false;
+  }
+
   Future<void> _startSession() async {
     setState(() {
       _isAcquiring = true;
@@ -57,14 +80,24 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
         final currentProgress = _progress + 0.1;
         if (currentProgress >= 1.0) {
           timer.cancel();
-          final finishedSession = await widget.measurementService.stopSession(session.sessionId);
-          if (mounted) {
-            setState(() {
-              _isAcquiring = false;
-              _progress = 1.0;
-              _statusMessage = 'Measurement completed successfully.';
-              _completedSession = finishedSession;
-            });
+          try {
+            final finishedSession = await widget.measurementService.stopSession(session.sessionId);
+            if (mounted) {
+              setState(() {
+                _isAcquiring = false;
+                _progress = 1.0;
+                _statusMessage = 'Measurement completed successfully.';
+                _completedSession = finishedSession;
+              });
+            }
+          } catch (e) {
+            if (mounted) {
+              setState(() {
+                _isAcquiring = false;
+                _error = 'Measurement could not be finalized: ${e.toString()}';
+                _statusMessage = 'Acquisition unavailable.';
+              });
+            }
           }
         } else {
           if (mounted) {
@@ -77,12 +110,12 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
       });
     } catch (e) {
       if (mounted) {
-        String friendlyError = 'Measurement is not available yet because required sensor validation is still pending.';
+        String friendlyError = 'Measurement is not available yet because required sensor validation is still pending on the instrument.';
         final errStr = e.toString().toLowerCase();
         if (errStr.contains('timeout')) {
           friendlyError = 'HemoPi did not respond in time. Please verify that the instrument is switched on.';
         } else if (errStr.contains('socket') || errStr.contains('unreachable')) {
-          friendlyError = 'Cannot reach HemoPi. Check that this phone and HemoPi are on the same Wi-Fi.';
+          friendlyError = 'Cannot reach HemoPi. Check that this phone and HemoPi are connected to the same Wi-Fi network.';
         }
 
         setState(() {
@@ -96,105 +129,128 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Measurement in Progress'),
-        automaticallyImplyLeading: !_isAcquiring,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            CustomCard(
-              title: _isAcquiring
-                  ? 'Recording in Progress'
-                  : (_error != null ? 'Acquisition Unavailable' : 'Recording Finished'),
-              subtitle: 'Subject: ${widget.patient?.patientId ?? "Unspecified"}',
-              trailing: StatusBadge(
-                label: _isAcquiring ? 'Active' : (_error != null ? 'Gated' : 'Complete'),
-                type: _isAcquiring
-                    ? BadgeType.measuring
-                    : (_error != null ? BadgeType.error : BadgeType.success),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: LinearProgressIndicator(
-                      value: _progress,
-                      minHeight: 10,
-                      backgroundColor: const Color(0xFFE2E8F0),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '${(_progress * 100).toInt()}% Completed',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B)),
+    return PopScope(
+      canPop: !_isAcquiring,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (!didPop) {
+          final allow = await _handleWillPop();
+          if (allow && mounted) {
+            Navigator.of(this.context).pop();
+          }
+        }
+      },
+      child: ClinicalScaffold(
+        appBar: AppBar(
+          title: const Text('Measurement in Progress'),
+          automaticallyImplyLeading: !_isAcquiring,
+        ),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              CustomCard(
+                title: _isAcquiring
+                    ? 'Recording in Progress'
+                    : (_error != null ? 'Acquisition Unavailable' : 'Recording Finished'),
+                subtitle: 'Subject: ${widget.patient?.patientId ?? "Unspecified"}',
+                trailing: StatusBadge(
+                  label: _isAcquiring ? 'Active' : (_error != null ? 'Gated' : 'Complete'),
+                  type: _isAcquiring
+                      ? BadgeType.measuring
+                      : (_error != null ? BadgeType.error : BadgeType.success),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: AppSpacing.xs),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(AppRadii.sm),
+                      child: LinearProgressIndicator(
+                        value: _progress,
+                        minHeight: 10,
+                        backgroundColor: AppColors.surfaceSubtle,
+                        color: AppColors.primary,
                       ),
-                      Text(
-                        _isAcquiring ? 'Keep finger steady' : 'Ready',
-                        style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${(_progress * 100).toInt()}% Completed',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
+                        ),
+                        Text(
+                          _isAcquiring ? 'Keep finger steady' : 'Ready',
+                          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(_statusMessage, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                    if (_error != null) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      Container(
+                        padding: const EdgeInsets.all(AppSpacing.sm),
+                        decoration: BoxDecoration(
+                          color: AppColors.statusErrorBg,
+                          borderRadius: BorderRadius.circular(AppRadii.sm),
+                          border: Border.all(color: AppColors.statusErrorBorder),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.info_rounded, color: AppColors.statusError, size: 18),
+                            const SizedBox(width: AppSpacing.xs),
+                            Expanded(
+                              child: Text(
+                                _error!,
+                                style: const TextStyle(color: Color(0xFF991B1B), fontSize: 12, height: 1.35),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(_statusMessage, style: const TextStyle(color: Color(0xFF475569), fontSize: 13)),
-                  if (_error != null) ...[
-                    const SizedBox(height: 14),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFEE2E2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.info_rounded, color: Color(0xFFDC2626), size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _error!,
-                              style: const TextStyle(color: Color(0xFF991B1B), fontSize: 12, height: 1.35),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                   ],
-                ],
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            const CustomCard(
-              title: 'Study Protocol Notice',
-              subtitle: 'Zero synthetic measurement guarantee',
-              child: Text(
-                'HemoPi records strictly authentic optical counts and PPG pulses. Simulated readings or fabricated hemoglobin estimations are never generated.',
-                style: TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.4),
+              const SizedBox(height: AppSpacing.md),
+              const ClinicalNoticeBanner(
+                title: 'Authentic Physical Recording Standard',
+                message:
+                    'HemoPi records strictly authentic optical counts and PPG pulses. Simulated readings or fabricated hemoglobin estimations are never generated.',
               ),
-            ),
-            const SizedBox(height: 24),
-            if (!_isAcquiring)
-              ElevatedButton.icon(
-                icon: Icon(_completedSession != null ? Icons.assessment_rounded : Icons.arrow_back_rounded),
-                label: Text(_completedSession != null ? 'View Session Result' : 'Return to Setup'),
-                onPressed: _completedSession != null
-                    ? () {
-                        Navigator.pushReplacementNamed(
-                          context,
-                          AppRoutes.sessionResult,
-                          arguments: _completedSession,
-                        );
-                      }
-                    : () => Navigator.pop(context),
-              ),
-          ],
+              const SizedBox(height: AppSpacing.xl),
+              if (_isAcquiring)
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.stop_circle_outlined, color: AppColors.statusError),
+                  label: const Text('Cancel Measurement', style: TextStyle(color: AppColors.statusError)),
+                  style: OutlinedButton.styleFrom(side: const BorderSide(color: AppColors.statusErrorBorder)),
+                  onPressed: () async {
+                    final shouldCancel = await _handleWillPop();
+                    if (shouldCancel && mounted) {
+                      Navigator.of(this.context).pop();
+                    }
+                  },
+                )
+              else
+                ElevatedButton.icon(
+                  icon: Icon(_completedSession != null ? Icons.assessment_rounded : Icons.arrow_back_rounded),
+                  label: Text(_completedSession != null ? 'View Session Result' : 'Return to Setup'),
+                  onPressed: _completedSession != null
+                      ? () {
+                          Navigator.pushReplacementNamed(
+                            context,
+                            AppRoutes.sessionResult,
+                            arguments: _completedSession,
+                          );
+                        }
+                      : () => Navigator.pop(context),
+                ),
+            ],
+          ),
         ),
       ),
     );

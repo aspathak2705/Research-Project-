@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/report_metadata.dart';
 import '../../../core/services/report_service.dart';
+import '../../../shared/widgets/clinical_scaffold.dart';
+import '../../../shared/widgets/state_view.dart';
+import '../../../app/design_tokens.dart';
 import '../../../app/routes.dart';
 
 class ReportHistoryScreen extends StatefulWidget {
@@ -62,7 +65,7 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ClinicalScaffold(
       appBar: AppBar(
         title: const Text('Report History'),
         actions: [
@@ -76,13 +79,13 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
             child: TextField(
               controller: _searchController,
               onChanged: _filterReports,
               decoration: InputDecoration(
                 hintText: 'Search reports by subject or report ID…',
-                prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF64748B)),
+                prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textMuted),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear_rounded, size: 20),
@@ -92,72 +95,52 @@ class _ReportHistoryScreenState extends State<ReportHistoryScreen> {
                         },
                       )
                     : null,
-                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: AppSpacing.md),
               ),
             ),
           ),
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
                 : _filteredReports.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(32.0),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(20),
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFF1F5F9),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(Icons.find_in_page_outlined, size: 48, color: Color(0xFF64748B)),
-                              ),
-                              const SizedBox(height: 20),
-                              const Text(
-                                'No Reports Found',
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'No reports match your current search query.',
-                                style: TextStyle(color: Color(0xFF64748B)),
-                              ),
-                            ],
-                          ),
-                        ),
+                    ? StateView(
+                        icon: Icons.history_toggle_off_rounded,
+                        title: _allReports.isEmpty ? 'No Reports Found' : 'No Matching Reports',
+                        description: _allReports.isEmpty
+                            ? 'Complete a measurement session to automatically produce observational reports.'
+                            : 'Check your search query or clear the filter.',
                       )
                     : ListView.separated(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
                         itemCount: _filteredReports.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.xs),
                         itemBuilder: (context, index) {
                           final report = _filteredReports[index];
                           final dateStr = report.generatedAt.toIso8601String().replaceAll('T', ' ').substring(0, 16);
 
                           return Card(
                             child: ListTile(
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 6),
                               leading: CircleAvatar(
-                                backgroundColor: report.isComplete ? const Color(0xFFE8F5E9) : const Color(0xFFFEF3C7),
+                                backgroundColor: report.isComplete ? AppColors.statusSuccessBg : AppColors.statusWarningBg,
                                 child: Icon(
                                   report.isComplete ? Icons.assignment_turned_in_rounded : Icons.pending_actions_rounded,
-                                  color: report.isComplete ? const Color(0xFF0D8A58) : const Color(0xFFD97706),
+                                  color: report.isComplete ? AppColors.statusSuccess : AppColors.statusWarning,
                                 ),
                               ),
                               title: Text(
-                                'Report: ${report.reportId}',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF1E293B)),
+                                report.reportId,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textPrimary),
                               ),
                               subtitle: Padding(
-                                padding: const EdgeInsets.only(top: 4.0),
+                                padding: const EdgeInsets.only(top: 2.0),
                                 child: Text(
-                                  'Subject: ${report.anonymizedCode}  •  $dateStr\nValid Samples: ${report.validSampleCount}',
-                                  style: const TextStyle(fontSize: 13, color: Color(0xFF64748B), height: 1.3),
+                                  'Subject: ${report.anonymizedCode}  •  $dateStr\nValid: ${report.validSampleCount}  Rejected: ${report.rejectedSampleCount}',
+                                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.3),
                                 ),
                               ),
-                              trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                              trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textDisabled),
+                              isThreeLine: true,
                               onTap: () {
                                 Navigator.pushNamed(
                                   context,

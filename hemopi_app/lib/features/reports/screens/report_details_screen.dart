@@ -4,6 +4,10 @@ import '../../../core/models/report_metadata.dart';
 import '../../../core/services/report_service.dart';
 import '../../../shared/widgets/custom_card.dart';
 import '../../../shared/widgets/status_badge.dart';
+import '../../../shared/widgets/clinical_scaffold.dart';
+import '../../../shared/widgets/clinical_notice_banner.dart';
+import '../../../shared/widgets/clinical_detail_row.dart';
+import '../../../app/design_tokens.dart';
 
 class ReportDetailsScreen extends StatefulWidget {
   final ReportMetadata report;
@@ -54,126 +58,98 @@ class _ReportDetailsScreenState extends State<ReportDetailsScreen> {
   Widget build(BuildContext context) {
     final report = widget.report;
 
-    return Scaffold(
+    return ClinicalScaffold(
       appBar: AppBar(
-        title: Text('Report: ${report.reportId}'),
+        title: Text('Report ${report.reportId}'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.share),
+            icon: const Icon(Icons.share_rounded),
+            tooltip: 'Share Report',
             onPressed: _summaryText != null ? _shareReport : null,
           ),
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             CustomCard(
-              title: 'Report Metadata',
+              title: 'Report Summary',
               subtitle: 'Subject Code: ${report.anonymizedCode}',
+              trailing: StatusBadge(
+                label: report.isComplete ? 'Complete' : 'Pending',
+                type: report.isComplete ? BadgeType.success : BadgeType.warning,
+              ),
               child: Column(
                 children: [
-                  _buildRow('Report ID', report.reportId),
-                  _buildRow('Session ID', report.sessionId),
-                  _buildRow('Generated At', report.generatedAt.toIso8601String().replaceAll('T', ' ').substring(0, 19)),
-                  _buildRow('Status', report.status),
-                  _buildRow('Valid Samples', '${report.validSampleCount}'),
-                  _buildRow('Rejected Samples', '${report.rejectedSampleCount}'),
-                  _buildRow('Validation Status', report.validationStatus),
+                  ClinicalDetailRow(label: 'Report ID', value: report.reportId),
+                  const Divider(),
+                  ClinicalDetailRow(label: 'Session ID', value: report.sessionId),
+                  const Divider(),
+                  ClinicalDetailRow(
+                    label: 'Generated At',
+                    value: report.generatedAt.toIso8601String().replaceAll('T', ' ').substring(0, 19),
+                  ),
+                  const Divider(),
+                  ClinicalDetailRow(label: 'Status', value: report.status),
+                  const Divider(),
+                  ClinicalDetailRow(label: 'Valid Samples', value: '${report.validSampleCount}'),
+                  const Divider(),
+                  ClinicalDetailRow(label: 'Rejected Samples', value: '${report.rejectedSampleCount}'),
+                  const Divider(),
+                  ClinicalDetailRow(label: 'Validation Status', value: report.validationStatus),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            CustomCard(
-              title: 'Report Readiness & Integrity Notice',
-              subtitle: 'Research Device Disclosure',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Completion Status', style: TextStyle(fontWeight: FontWeight.bold)),
-                      StatusBadge(
-                        label: report.isComplete ? 'Complete' : 'Incomplete / Pending',
-                        type: report.isComplete ? BadgeType.success : BadgeType.warning,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'NOTICE: HemoPi is a non-invasive optical research instrument. This report contains locally persisted physical sensor readings and does NOT constitute a clinically validated diagnostic hemoglobin measurement.',
-                    style: TextStyle(fontSize: 12, color: Colors.black87),
-                  ),
-                ],
-              ),
+            const SizedBox(height: AppSpacing.md),
+
+            const ClinicalNoticeBanner(
+              title: 'Investigational Research Artifact',
+              message:
+                  'This report contains non-invasive observational optical records. It has not been approved for standalone medical diagnosis or therapeutic intervention.',
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.md),
+
+            // Raw CSV Data Preview Card
             CustomCard(
-              title: 'Summary Text Log',
-              subtitle: 'Locally generated text report',
+              title: 'Measurement Records Preview',
+              subtitle: 'Authentic physical counts recorded during session',
               child: _isLoadingContent
-                  ? const Center(child: CircularProgressIndicator())
-                  : Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(8),
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(AppSpacing.md),
+                        child: CircularProgressIndicator(color: AppColors.primary),
                       ),
-                      child: Text(
-                        _summaryText ?? 'No summary text available.',
-                        style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                      ),
-                    ),
-            ),
-            const SizedBox(height: 16),
-            CustomCard(
-              title: 'CSV Data File',
-              subtitle: 'Physical sensor measurements',
-              child: _isLoadingContent
-                  ? const Center(child: CircularProgressIndicator())
-                  : _csvContent == null
-                      ? const Text('No CSV file associated or available for this report.')
+                    )
+                  : (_csvContent == null || _csvContent!.isEmpty)
+                      ? const Text(
+                          'No CSV data file is stored locally for this session.',
+                          style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+                        )
                       : Container(
-                          padding: const EdgeInsets.all(12),
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(AppSpacing.sm),
                           decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(8),
+                            color: AppColors.surfaceSubtle,
+                            borderRadius: BorderRadius.circular(AppRadii.sm),
                           ),
-                          child: Text(
-                            _csvContent!.length > 500
-                                ? '${_csvContent!.substring(0, 500)}\n...[Truncated]'
-                                : _csvContent!,
-                            style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Text(
+                              _csvContent!.split('\n').take(12).join('\n'),
+                              style: const TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 11,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
                           ),
                         ),
             ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.download),
-                label: const Text('Export / Share Report Summary'),
-                onPressed: _summaryText != null ? _shareReport : null,
-              ),
-            ),
+            const SizedBox(height: AppSpacing.md),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.black54)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
-        ],
       ),
     );
   }

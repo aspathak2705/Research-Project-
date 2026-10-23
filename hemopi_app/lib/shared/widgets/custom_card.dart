@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/design_tokens.dart';
 
 class CustomCard extends StatelessWidget {
   final String? title;
@@ -7,6 +8,7 @@ class CustomCard extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final VoidCallback? onTap;
   final Widget? trailing;
+  final Color? backgroundColor;
 
   const CustomCard({
     super.key,
@@ -16,24 +18,23 @@ class CustomCard extends StatelessWidget {
     this.padding,
     this.onTap,
     this.trailing,
+    this.backgroundColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Card(
       elevation: 0,
-      color: Colors.white,
+      color: backgroundColor ?? AppColors.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: Color(0xFFE2E8F0), width: 1.2),
+        borderRadius: BorderRadius.circular(AppRadii.lg),
+        side: const BorderSide(color: AppColors.border, width: 1.1),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: padding ?? const EdgeInsets.all(18.0),
+          padding: padding ?? const EdgeInsets.all(AppSpacing.md),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -49,29 +50,34 @@ class CustomCard extends StatelessWidget {
                         children: [
                           Text(
                             title!,
-                            style: theme.textTheme.titleMedium?.copyWith(
+                            style: const TextStyle(
+                              fontSize: 15,
                               fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1E293B),
-                              fontSize: 16,
+                              color: AppColors.textPrimary,
+                              letterSpacing: -0.2,
                             ),
                           ),
                           if (subtitle != null) ...[
                             const SizedBox(height: 3),
                             Text(
                               subtitle!,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: const Color(0xFF64748B),
-                                fontSize: 13,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textMuted,
+                                height: 1.3,
                               ),
                             ),
                           ],
                         ],
                       ),
                     ),
-                    ?trailing,
+                    if (trailing != null) ...[
+                      const SizedBox(width: AppSpacing.sm),
+                      trailing!,
+                    ],
                   ],
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: AppSpacing.sm),
               ],
               child,
             ],

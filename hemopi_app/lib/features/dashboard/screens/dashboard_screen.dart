@@ -5,6 +5,9 @@ import '../../../core/services/patient_service.dart';
 import '../../../core/services/report_service.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../../shared/widgets/custom_card.dart';
+import '../../../shared/widgets/clinical_scaffold.dart';
+import '../../../shared/widgets/clinical_notice_banner.dart';
+import '../../../app/design_tokens.dart';
 import '../../../app/routes.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -28,50 +31,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Scaffold(
+    return ClinicalScaffold(
       appBar: AppBar(
-        title: const Text('HemoPi'),
+        title: const Text('HemoPi Clinical Overview'),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Settings & Data Storage',
+            tooltip: 'Settings & Local Storage',
             onPressed: () => Navigator.pushNamed(context, AppRoutes.localStorageManagement),
           ),
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Clinical Research Banner
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFEF3C7),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFFDE68A)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.shield_outlined, color: Color(0xFFD97706), size: 22),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Research Study Protocol: Non-invasive observational evaluation.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF92400E),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            const ClinicalNoticeBanner(
+              title: 'Investigational Clinical Device',
+              message:
+                  'HemoPi is an observational evaluation system. Measurements are investigational and must not be used as the sole basis for clinical diagnosis.',
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: AppSpacing.md),
 
             // Instrument Readiness Card
             ValueListenableBuilder<DeviceInfo>(
@@ -80,9 +62,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 final isConnected = info.isConnected;
                 return CustomCard(
                   title: 'HemoPi Instrument',
-                  subtitle: isConnected ? 'Connected & ready' : 'Not reachable on network',
+                  subtitle: isConnected ? 'Online on local clinic network' : 'Not reachable on network',
                   trailing: StatusBadge(
-                    label: isConnected ? 'Ready' : 'Needs Attention',
+                    label: isConnected ? 'Online' : 'Attention Required',
                     type: isConnected ? BadgeType.ready : BadgeType.warning,
                   ),
                   child: Column(
@@ -92,34 +74,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Icon(
                             isConnected ? Icons.check_circle_outline : Icons.wifi_off_outlined,
                             size: 18,
-                            color: isConnected ? const Color(0xFF0D8A58) : const Color(0xFFD97706),
+                            color: isConnected ? AppColors.statusSuccess : AppColors.statusWarning,
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: AppSpacing.xs),
                           Expanded(
                             child: Text(
                               isConnected
-                                  ? 'Instrument connected. Sensors detected and operational.'
-                                  : 'Connect this phone and HemoPi to the same clinic network.',
-                              style: const TextStyle(fontSize: 13, color: Color(0xFF475569)),
+                                  ? 'Instrument connected. Ready to prepare patient measurement.'
+                                  : 'Connect this phone and HemoPi to the same clinic Wi-Fi network.',
+                              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: AppSpacing.sm),
                       Row(
                         children: [
                           Expanded(
                             child: ElevatedButton.icon(
                               onPressed: () => Navigator.pushNamed(context, AppRoutes.preflightCheck),
                               icon: const Icon(Icons.fact_check_rounded, size: 18),
-                              label: const Text('Check HemoPi'),
+                              label: const Text('Check Instrument'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: isConnected ? const Color(0xFF007A78) : const Color(0xFF64748B),
+                                backgroundColor: isConnected ? AppColors.primary : AppColors.textMuted,
                                 foregroundColor: Colors.white,
                               ),
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: AppSpacing.xs),
                           OutlinedButton.icon(
                             onPressed: () => Navigator.pushNamed(context, AppRoutes.deviceStatus),
                             icon: const Icon(Icons.info_outline_rounded, size: 18),
@@ -132,44 +114,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 );
               },
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: AppSpacing.md),
 
             // Primary Action: Start New Measurement
             Card(
               elevation: 0,
-              color: theme.colorScheme.primary,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              color: AppColors.primary,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.lg)),
               child: InkWell(
                 onTap: () => Navigator.pushNamed(context, AppRoutes.measurementSetup),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(AppRadii.lg),
                 child: Padding(
-                  padding: const EdgeInsets.all(22.0),
+                  padding: const EdgeInsets.all(AppSpacing.lg),
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(AppSpacing.sm),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.play_arrow_rounded, size: 36, color: Colors.white),
+                        child: const Icon(Icons.play_arrow_rounded, size: 34, color: Colors.white),
                       ),
-                      const SizedBox(width: 18),
+                      const SizedBox(width: AppSpacing.md),
                       const Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'New Measurement',
+                              'Start New Measurement',
                               style: TextStyle(
-                                fontSize: 20,
+                                fontSize: 18,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
                               ),
                             ),
-                            SizedBox(height: 4),
+                            SizedBox(height: 3),
                             Text(
-                              'Select patient and start sensor recording session',
+                              'Select patient and record sensor session',
                               style: TextStyle(
                                 fontSize: 13,
                                 color: Colors.white70,
@@ -184,7 +166,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: AppSpacing.md),
 
             // Quick Stats Row: Patients and Reports
             Row(
@@ -192,7 +174,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Expanded(
                   child: CustomCard(
                     title: 'Patients',
-                    subtitle: 'Study cohort',
+                    subtitle: 'Study participants',
                     onTap: () => Navigator.pushNamed(context, AppRoutes.patientList),
                     child: ValueListenableBuilder(
                       valueListenable: widget.patientService.patientsNotifier,
@@ -201,22 +183,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Text(
                             '${patients.length}',
                             style: const TextStyle(
-                              fontSize: 26,
+                              fontSize: 24,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF1E293B),
+                              color: AppColors.textPrimary,
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: AppSpacing.xs),
                           const Text(
                             'Registered',
-                            style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                            style: TextStyle(fontSize: 13, color: AppColors.textMuted),
                           ),
                         ],
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: CustomCard(
                     title: 'Reports',
@@ -229,15 +211,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Text(
                             '${reports.length}',
                             style: const TextStyle(
-                              fontSize: 26,
+                              fontSize: 24,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF1E293B),
+                              color: AppColors.textPrimary,
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: AppSpacing.xs),
                           const Text(
                             'Saved',
-                            style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                            style: TextStyle(fontSize: 13, color: AppColors.textMuted),
                           ),
                         ],
                       ),
@@ -246,7 +228,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: AppSpacing.md),
 
             // Navigation Links Card
             CustomCard(
@@ -256,48 +238,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Container(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(AppSpacing.xs),
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(8),
+                        color: AppColors.primaryContainer,
+                        borderRadius: BorderRadius.circular(AppRadii.sm),
                       ),
-                      child: Icon(Icons.people_outline_rounded, color: theme.colorScheme.primary, size: 20),
+                      child: const Icon(Icons.people_outline_rounded, color: AppColors.primary, size: 20),
                     ),
-                    title: const Text('Manage Patients', style: TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: const Text('Register, review, and search participants', style: TextStyle(fontSize: 12)),
-                    trailing: const Icon(Icons.chevron_right_rounded),
+                    title: const Text('Manage Patients', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('Register, review, and search participants', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
                     onTap: () => Navigator.pushNamed(context, AppRoutes.patientList),
                   ),
                   const Divider(height: 1),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Container(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(AppSpacing.xs),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE0F2FE),
-                        borderRadius: BorderRadius.circular(8),
+                        color: AppColors.statusInfoBg,
+                        borderRadius: BorderRadius.circular(AppRadii.sm),
                       ),
-                      child: const Icon(Icons.history_rounded, color: Color(0xFF0284C7), size: 20),
+                      child: const Icon(Icons.history_rounded, color: AppColors.statusInfo, size: 20),
                     ),
-                    title: const Text('Previous Sessions', style: TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: const Text('Timeline of past measurement sessions', style: TextStyle(fontSize: 12)),
-                    trailing: const Icon(Icons.chevron_right_rounded),
+                    title: const Text('Previous Sessions', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('Timeline of past measurement sessions', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
                     onTap: () => Navigator.pushNamed(context, AppRoutes.sessionHistory),
                   ),
                   const Divider(height: 1),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: Container(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(AppSpacing.xs),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(8),
+                        color: AppColors.surfaceSubtle,
+                        borderRadius: BorderRadius.circular(AppRadii.sm),
                       ),
-                      child: const Icon(Icons.settings_outlined, color: Color(0xFF475569), size: 20),
+                      child: const Icon(Icons.storage_outlined, color: AppColors.textSecondary, size: 20),
                     ),
-                    title: const Text('Settings & Data Export', style: TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: const Text('Review offline storage and backup files', style: TextStyle(fontSize: 12)),
-                    trailing: const Icon(Icons.chevron_right_rounded),
+                    title: const Text('Settings & Storage', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: const Text('Review offline storage and backup files', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                    trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
                     onTap: () => Navigator.pushNamed(context, AppRoutes.localStorageManagement),
                   ),
                 ],

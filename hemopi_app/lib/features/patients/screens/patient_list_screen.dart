@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/patient.dart';
 import '../../../core/services/patient_service.dart';
+import '../../../shared/widgets/clinical_scaffold.dart';
+import '../../../shared/widgets/state_view.dart';
+import '../../../app/design_tokens.dart';
 import '../../../app/routes.dart';
 
 class PatientListScreen extends StatefulWidget {
@@ -77,7 +80,7 @@ class _PatientListScreenState extends State<PatientListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ClinicalScaffold(
       appBar: AppBar(
         title: const Text('Patients'),
         actions: [
@@ -92,115 +95,77 @@ class _PatientListScreenState extends State<PatientListScreen> {
         children: [
           // Search Bar
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: 'Search patients by ID or notes…',
-                prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF64748B)),
+                prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textMuted),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear_rounded, size: 20),
                         onPressed: () => _searchController.clear(),
                       )
                     : null,
-                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: AppSpacing.md),
               ),
             ),
           ),
 
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
                 : _error != null
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24.0),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.cloud_off_rounded, size: 48, color: Color(0xFFDC2626)),
-                              const SizedBox(height: 16),
-                              Text(_error!, style: const TextStyle(fontSize: 16, color: Color(0xFF1E293B))),
-                              const SizedBox(height: 16),
-                              ElevatedButton(
-                                onPressed: _loadPatients,
-                                child: const Text('Try Again'),
-                              ),
-                            ],
-                          ),
-                        ),
+                    ? StateView(
+                        icon: Icons.cloud_off_rounded,
+                        iconColor: AppColors.statusError,
+                        title: 'Unable to Load Patients',
+                        description: _error!,
+                        actionLabel: 'Try Again',
+                        onAction: _loadPatients,
                       )
                     : _filteredPatients.isEmpty
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(32.0),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(20),
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFFF1F5F9),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(Icons.person_search_outlined, size: 48, color: Color(0xFF64748B)),
-                                  ),
-                                  const SizedBox(height: 20),
-                                  Text(
-                                    _patients.isEmpty ? 'No Patients Registered Yet' : 'No Matching Patients',
-                                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    _patients.isEmpty
-                                        ? 'Register a study participant to begin recording research measurements.'
-                                        : 'Check the spelling or clear search filter.',
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(color: Color(0xFF64748B), height: 1.4),
-                                  ),
-                                  if (_patients.isEmpty) ...[
-                                    const SizedBox(height: 20),
-                                    ElevatedButton.icon(
-                                      onPressed: () async {
-                                        await Navigator.pushNamed(context, AppRoutes.addPatient);
-                                        _loadPatients();
-                                      },
-                                      icon: const Icon(Icons.person_add_rounded),
-                                      label: const Text('Add Patient'),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
+                        ? StateView(
+                            icon: Icons.person_search_outlined,
+                            title: _patients.isEmpty ? 'No Patients Registered Yet' : 'No Matching Patients',
+                            description: _patients.isEmpty
+                                ? 'Register a study participant to begin recording research measurements.'
+                                : 'Check spelling or clear the search query.',
+                            actionLabel: _patients.isEmpty ? 'Register Patient' : null,
+                            onAction: _patients.isEmpty
+                                ? () async {
+                                    await Navigator.pushNamed(context, AppRoutes.addPatient);
+                                    _loadPatients();
+                                  }
+                                : null,
                           )
                         : ListView.separated(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
                             itemCount: _filteredPatients.length,
-                            separatorBuilder: (_, _) => const SizedBox(height: 10),
+                            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.xs),
                             itemBuilder: (context, index) {
                               final patient = _filteredPatients[index];
                               return Card(
                                 child: ListTile(
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 6),
                                   leading: CircleAvatar(
-                                    backgroundColor: const Color(0xFFE0F2F1),
-                                    child: const Icon(Icons.person_rounded, color: Color(0xFF007A78)),
+                                    backgroundColor: AppColors.primaryLight,
+                                    child: const Icon(Icons.person_rounded, color: AppColors.primary),
                                   ),
                                   title: Text(
                                     patient.patientId,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1E293B)),
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textPrimary),
                                   ),
                                   subtitle: Padding(
-                                    padding: const EdgeInsets.only(top: 4.0),
+                                    padding: const EdgeInsets.only(top: 3.0),
                                     child: Text(
                                       '${patient.age != null ? "Age: ${patient.age}  •  " : ""}${patient.sex ?? "Unspecified"}${patient.notes != null ? "  •  ${patient.notes}" : ""}',
-                                      style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                                      style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                                  trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textDisabled),
                                   onTap: () {
                                     Navigator.pushNamed(
                                       context,
@@ -216,6 +181,8 @@ class _PatientListScreenState extends State<PatientListScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
         onPressed: () async {
           await Navigator.pushNamed(context, AppRoutes.addPatient);
           _loadPatients();

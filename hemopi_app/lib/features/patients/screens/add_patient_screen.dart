@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/patient_service.dart';
+import '../../../shared/widgets/clinical_scaffold.dart';
+import '../../../shared/widgets/custom_card.dart';
+import '../../../app/design_tokens.dart';
 
 class AddPatientScreen extends StatefulWidget {
   final PatientService patientService;
@@ -49,7 +52,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Patient registered successfully.'),
-            backgroundColor: Color(0xFF0D8A58),
+            backgroundColor: AppColors.statusSuccess,
           ),
         );
         Navigator.pop(context, true);
@@ -63,7 +66,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(msg),
-            backgroundColor: const Color(0xFFDC2626),
+            backgroundColor: AppColors.statusError,
           ),
         );
         setState(() {
@@ -75,105 +78,115 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ClinicalScaffold(
       appBar: AppBar(
         title: const Text('Register Patient'),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
         child: Form(
           key: _formKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Participant Details',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E293B),
+              CustomCard(
+                title: 'Participant Information',
+                subtitle: 'Standard clinical identifiers for this subject',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Patient Identifier
+                    TextFormField(
+                      controller: _idController,
+                      decoration: const InputDecoration(
+                        labelText: 'Patient Identifier *',
+                        hintText: 'e.g. SUBJ-0042',
+                        prefixIcon: Icon(Icons.badge_outlined, color: AppColors.textMuted),
+                      ),
+                      textCapitalization: TextCapitalization.characters,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Patient Identifier is required.';
+                        }
+                        if (value.trim().length < 2) {
+                          return 'Identifier must have at least 2 characters.';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+
+                    // Age
+                    TextFormField(
+                      controller: _ageController,
+                      decoration: const InputDecoration(
+                        labelText: 'Age (Years)',
+                        hintText: 'e.g. 35',
+                        prefixIcon: Icon(Icons.cake_outlined, color: AppColors.textMuted),
+                      ),
+                      keyboardType: TextInputType.number,
+                      validator: (value) {
+                        if (value != null && value.trim().isNotEmpty) {
+                          final age = int.tryParse(value.trim());
+                          if (age == null || age < 0 || age > 125) {
+                            return 'Enter a valid age between 0 and 125.';
+                          }
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+
+                    // Biological Sex
+                    DropdownButtonFormField<String>(
+                      initialValue: _selectedSex,
+                      decoration: const InputDecoration(
+                        labelText: 'Biological Sex',
+                        prefixIcon: Icon(Icons.wc_outlined, color: AppColors.textMuted),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'Unspecified', child: Text('Unspecified')),
+                        DropdownMenuItem(value: 'Female', child: Text('Female')),
+                        DropdownMenuItem(value: 'Male', child: Text('Male')),
+                        DropdownMenuItem(value: 'Other', child: Text('Other')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setState(() => _selectedSex = val);
+                      },
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+
+                    // Clinical Notes
+                    TextFormField(
+                      controller: _notesController,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Clinical / Study Notes (Optional)',
+                        hintText: 'e.g. Fasting state, baseline reference Hb, clinical cohort notes…',
+                        alignLabelWithHint: true,
+                        prefixIcon: Padding(
+                          padding: EdgeInsets.only(bottom: 40.0),
+                          child: Icon(Icons.notes_outlined, color: AppColors.textMuted),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 6),
-              const Text(
-                'Enter standard clinical research identifiers for this subject.',
-                style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-              ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.lg),
 
-              TextFormField(
-                controller: _idController,
-                textCapitalization: TextCapitalization.characters,
-                decoration: const InputDecoration(
-                  labelText: 'Patient / Subject ID *',
-                  hintText: 'e.g. SUBJ-001',
-                  prefixIcon: Icon(Icons.badge_outlined),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter a patient identifier.';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _ageController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Age (Years)',
-                  hintText: 'e.g. 45',
-                  prefixIcon: Icon(Icons.cake_outlined),
-                ),
-                validator: (value) {
-                  if (value != null && value.trim().isNotEmpty) {
-                    final n = int.tryParse(value.trim());
-                    if (n == null || n < 0 || n > 125) {
-                      return 'Please enter a valid age between 0 and 125.';
-                    }
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              DropdownButtonFormField<String>(
-                initialValue: _selectedSex,
-                decoration: const InputDecoration(
-                  labelText: 'Biological Sex',
-                  prefixIcon: Icon(Icons.wc_outlined),
-                ),
-                items: ['Unspecified', 'Male', 'Female', 'Other']
-                    .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                    .toList(),
-                onChanged: (val) {
-                  if (val != null) setState(() => _selectedSex = val);
-                },
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _notesController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Clinical Notes (Optional)',
-                  hintText: 'Medical history notes, clinical observations, or study protocol notes…',
-                  alignLabelWithHint: true,
-                ),
-              ),
-              const SizedBox(height: 28),
-
-              ElevatedButton(
+              ElevatedButton.icon(
                 onPressed: _isSaving ? null : _savePatient,
-                child: _isSaving
+                icon: _isSaving
                     ? const SizedBox(
-                        width: 22,
-                        height: 22,
+                        width: 18,
+                        height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
-                    : const Text('Save Patient'),
+                    : const Icon(Icons.save_rounded, size: 20),
+                label: Text(_isSaving ? 'Registering…' : 'Register Patient'),
               ),
+              const SizedBox(height: AppSpacing.md),
             ],
           ),
         ),
