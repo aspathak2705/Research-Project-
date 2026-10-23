@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import html
 import json
 from pathlib import Path
 from typing import Any
@@ -76,7 +77,7 @@ class ValidationReportGenerator:
 
             ch_stats: dict[str, Any] = {}
             for ch in SPECTRAL_CHANNELS:
-                ch_stats[ch] = calculate_channel_statistics(channel_series[ch])
+                ch_stats[ch] = calculate_channel_statistics(channel_series[ch], condition=cond_name)
             condition_stats[cond_name] = ch_stats
 
             # Generate Plots for this condition
@@ -96,11 +97,16 @@ class ValidationReportGenerator:
         stat_csv_path = self.analysis_dir / "channel_statistics.csv"
         with open(stat_csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(["condition", "channel", "n", "mean", "std_dev", "min", "max", "range", "cv_percent", "potentially_stuck"])
+            writer.writerow([
+                "condition", "channel", "n", "mean", "std_dev", "min", "max", "range",
+                "cv_percent", "potentially_stuck", "diagnostic_flag"
+            ])
             for cond, ch_map in condition_stats.items():
                 for ch, s in ch_map.items():
+                    diag_flag = s.get("diagnostic_flag", "POTENTIALLY_STUCK" if s["potentially_stuck"] else "NORMAL")
                     writer.writerow([
-                        cond, f"{ch}nm", s["n"], s["mean"], s["std_dev"], s["min"], s["max"], s["range"], s["cv_percent"], s["potentially_stuck"]
+                        cond, f"{ch}nm", s["n"], s["mean"], s["std_dev"], s["min"], s["max"], s["range"],
+                        s["cv_percent"], s["potentially_stuck"], diag_flag
                     ])
 
         # 3. Optical Response comparison if baseline and response present
@@ -170,10 +176,10 @@ class ValidationReportGenerator:
 
         for cond, ch_map in stats.items():
             lines.append(f"### Condition: {cond}")
-            lines.append("| Channel | Samples | Mean ADC | Std Dev | Min | Max | Range | CV (%) | Flag |")
+            lines.append("| Channel | Samples | Mean ADC | Std Dev | Min | Max | Range | CV (%) | Diagnostic Flag |")
             lines.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
             for ch, s in ch_map.items():
-                flag = "POTENTIALLY_STUCK" if s["potentially_stuck"] else "NORMAL"
+                flag = s.get("diagnostic_flag", "POTENTIALLY_STUCK" if s["potentially_stuck"] else "NORMAL")
                 cv_str = f"{s['cv_percent']}%" if s['cv_percent'] is not None else "N/A"
                 lines.append(f"| {ch}nm | {s['n']} | {s['mean']} | {s['std_dev']} | {s['min']} | {s['max']} | {s['range']} | {cv_str} | {flag} |")
             lines.append("")
@@ -221,7 +227,6 @@ class ValidationReportGenerator:
         durations: dict[str, list[float]],
         comparisons: list[dict[str, Any]],
     ) -> str:
-        # Wrap the markdown report in clean semantic HTML styling
         md = self._build_markdown_report(manifest, stats, durations, comparisons)
         return f"""<!DOCTYPE html>
 <html>

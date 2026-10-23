@@ -4,7 +4,11 @@ import math
 from typing import Sequence
 from validation.as7341.config import SPECTRAL_CHANNELS
 
-def calculate_channel_statistics(values: Sequence[int]) -> dict[str, float | int | str | None]:
+def calculate_channel_statistics(
+    values: Sequence[int],
+    *,
+    condition: str | None = None,
+) -> dict[str, float | int | str | bool | None]:
     if not values:
         return {
             "n": 0,
@@ -15,6 +19,7 @@ def calculate_channel_statistics(values: Sequence[int]) -> dict[str, float | int
             "range": None,
             "cv_percent": None,
             "potentially_stuck": False,
+            "diagnostic_flag": "NO_DATA",
         }
 
     n = len(values)
@@ -31,8 +36,22 @@ def calculate_channel_statistics(values: Sequence[int]) -> dict[str, float | int
     else:
         cv_percent = None
 
-    # Flag potentially stuck if range is 0 over 10 or more samples
-    potentially_stuck = (n >= 10 and v_range == 0)
+    cond_upper = condition.strip().upper() if condition else None
+    is_constant = (n >= 10 and v_range == 0)
+
+    # Condition-aware diagnostic evaluation
+    if cond_upper == "DARK" and is_constant and v_max == 0:
+        # Legitimate dark baseline when sensor is covered and returning zero counts
+        potentially_stuck = False
+        diagnostic_flag = "ZERO_BASELINE"
+    elif is_constant:
+        # Constant readings under reference light, non-zero dark, or other conditions
+        potentially_stuck = True
+        diagnostic_flag = "POTENTIALLY_STUCK"
+    else:
+        # Varying readings within normal dynamic range
+        potentially_stuck = False
+        diagnostic_flag = "NORMAL"
 
     return {
         "n": n,
@@ -43,6 +62,7 @@ def calculate_channel_statistics(values: Sequence[int]) -> dict[str, float | int
         "range": v_range,
         "cv_percent": round(cv_percent, 2) if cv_percent is not None else None,
         "potentially_stuck": potentially_stuck,
+        "diagnostic_flag": diagnostic_flag,
     }
 
 def calculate_drift(values: Sequence[int], duration_seconds: float) -> dict[str, float | None]:
@@ -52,7 +72,6 @@ def calculate_drift(values: Sequence[int], duration_seconds: float) -> dict[str,
             "percent_drift_total": None,
         }
 
-    # Linear drift estimate between initial half and final half
     half = len(values) // 2
     initial_mean = sum(values[:half]) / half
     final_mean = sum(values[half:]) / (len(values) - half)
