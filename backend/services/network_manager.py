@@ -177,43 +177,89 @@ class NetworkManagerService:
                 "networks": []
             }
 
+    _failed_attempts: Dict[str, List[float]] = {}
+    MAX_ATTEMPTS = 5
+    WINDOW_SECONDS = 60.0
+
     @staticmethod
     def get_setup_pin() -> str:
         """
         Get or initialize the persistent device-specific pairing/setup PIN.
-        Stored on local device at config/device_pin.secret.
-        Default fallback 7341.
+        Uses cryptographically secure random 6-digit generation on first initialization.
+        Stored on local device at data/setup_pin.secret.
         """
         import os
+        import secrets
         from backend.config import DATA_DIR
         pin_file = os.path.join(DATA_DIR, "setup_pin.txt")
         try:
             if os.path.exists(pin_file):
                 with open(pin_file, "r") as f:
                     pin = f.read().strip()
-                    if pin:
+                    if pin and len(pin) >= 6:
                         return pin
-            # Create default reproducible PIN
-            default_pin = "734102"
+            # Generate cryptographically secure 6-digit PIN
+            generated_pin = f"{secrets.randbelow(900000) + 100000}"
             with open(pin_file, "w") as f:
-                f.write(default_pin)
-            return default_pin
+                f.write(generated_pin)
+            return generated_pin
         except Exception:
             return "734102"
 
-    @staticmethod
-    def verify_pin(candidate_pin: Optional[str]) -> bool:
+    @classmethod
+    def check_rate_limit(cls, client_ip: str) -> bool:
         """
-        Verify incoming PIN. If HEMOPI_REQUIRE_PIN is not set or false in development,
-        allow graceful authorization.
+        Returns True if within rate limit, False if rate limited.
+        Sliding window: 5 attempts per 60 seconds per IP.
+        """
+        import time
+        now = time.time()
+        attempts = cls._failed_attempts.get(client_ip, [])
+        # prune old attempts
+        valid_attempts = [t for t in attempts if now - t < cls.WINDOW_SECONDS]
+        cls._failed_attempts[client_ip] = valid_attempts
+        return len(valid_attempts) < cls.MAX_ATTEMPTS
+
+    @classmethod
+    def record_failed_attempt(cls, client_ip: str) -> None:
+        import time
+        now = time.time()
+        if client_ip not in cls._failed_attempts:
+            cls._failed_attempts[client_ip] = []
+        cls._failed_attempts[client_ip].append(now)
+
+    @classmethod
+    def reset_rate_limit(cls, client_ip: str) -> None:
+        if client_ip in cls._failed_attempts:
+            cls._failed_attempts.pop(client_ip, None)
+
+    @classmethod
+    def verify_pin(cls, candidate_pin: Optional[str], client_ip: str = "default") -> bool:
+        """
+        Verify incoming PIN using constant-time comparison.
+        Applies sliding window rate limiting.
         """
         import os
+        import hmac
         require_pin = os.getenv("HEMOPI_REQUIRE_PIN", "0").strip().lower() in ("1", "true", "yes")
         if not require_pin:
             return True
-        if not candidate_pin:
+
+        if not cls.check_rate_limit(client_ip):
+            logger.warning(f"Rate limit exceeded for client IP '{client_ip}' on setup PIN verification")
             return False
-        return candidate_pin.strip() == NetworkManagerService.get_setup_pin()
+
+        if not candidate_pin:
+            cls.record_failed_attempt(client_ip)
+            return False
+
+        expected = cls.get_setup_pin()
+        is_valid = hmac.compare_digest(candidate_pin.strip().encode("utf-8"), expected.encode("utf-8"))
+        if not is_valid:
+            cls.record_failed_attempt(client_ip)
+        else:
+            cls.reset_rate_limit(client_ip)
+        return is_valid
 
     @staticmethod
     def get_active_ssid() -> Optional[str]:
@@ -258,8 +304,8 @@ class NetworkManagerService:
             logger.debug(f"Hotspot active check failed: {e}")
         return False
 
-    @staticmethod
-    def connect_wifi(ssid: str, password: str, pin: Optional[str] = None) -> dict:
+    @classmethod
+    def connect_wifi(cls, ssid: str, password: str, pin: Optional[str] = None, client_ip: str = "default") -> dict:
         """
         Connect to a Wi-Fi network and verify connection state.
         Validates authorization PIN if configured.
@@ -267,12 +313,18 @@ class NetworkManagerService:
         Ensures device actually joins and obtains a valid IP rather than blindly relying on exit code.
         """
         # 1. Authorization check
-        if not NetworkManagerService.verify_pin(pin):
+        if not cls.verify_pin(pin, client_ip=client_ip):
+            if not cls.check_rate_limit(client_ip):
+                code = "RATE_LIMITED"
+                msg = "Too many failed attempts. Try again in 60 seconds."
+            else:
+                code = "UNAUTHORIZED"
+                msg = "Invalid device setup PIN"
             return {
                 "status": "error",
-                "code": "UNAUTHORIZED",
+                "code": code,
                 "connection_state": "AUTH_FAILED",
-                "message": "Invalid device setup PIN",
+                "message": msg,
                 "ip_address": None,
                 "target_ssid": ssid
             }

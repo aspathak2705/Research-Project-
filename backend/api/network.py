@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from backend.services.network_manager import NetworkManagerService
 from backend.schemas.network import (
     WifiScanResponse,
@@ -19,8 +19,9 @@ def scan_wifi():
     return NetworkManagerService.list_wifi_networks()
 
 @router.post("/wifi/connect", response_model=WifiConnectResponse)
-def connect_wifi(req: WifiConnectRequest):
-    return NetworkManagerService.connect_wifi(req.ssid, req.password, pin=req.pin)
+def connect_wifi(req: WifiConnectRequest, request: Request):
+    client_ip = request.client.host if request.client else "unknown"
+    return NetworkManagerService.connect_wifi(req.ssid, req.password, pin=req.pin, client_ip=client_ip)
 
 @router.post("/wifi/disconnect", response_model=WifiDisconnectResponse)
 def disconnect_wifi():
