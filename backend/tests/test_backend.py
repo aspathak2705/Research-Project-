@@ -14,7 +14,9 @@ class TestBackendEndpoints(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.json()["service"], "HemoPi API")
 
-    def test_health_endpoint(self):
+    @patch("backend.services.device_service.DeviceBackendService._probe_i2c_bus")
+    def test_health_endpoint(self, mock_probe):
+        mock_probe.return_value = ["0x39", "0x57"]
         res = self.client.get("/api/health")
         self.assertEqual(res.status_code, 200)
         data = res.json()
@@ -26,7 +28,9 @@ class TestBackendEndpoints(unittest.TestCase):
         self.assertTrue(data["sensors"]["max30102"]["present"])
         self.assertFalse(data["sensors"]["as7341"]["research_ready"])
 
-    def test_device_status(self):
+    @patch("backend.services.device_service.DeviceBackendService._probe_i2c_bus")
+    def test_device_status(self, mock_probe):
+        mock_probe.return_value = ["0x39", "0x57"]
         res = self.client.get("/api/device/status")
         self.assertEqual(res.status_code, 200)
         data = res.json()

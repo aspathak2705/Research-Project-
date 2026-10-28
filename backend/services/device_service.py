@@ -33,51 +33,63 @@ class DeviceBackendService:
         i2c_available = len(live_addresses) > 0
 
         # MAX30102 on Bus 1 @ 0x57
-        if i2c_available:
-            max_detected = "0x57" in live_addresses
-            max_msg = (
-                "MAX30102 PPG sensor detected at 0x57. Hardware initialized and PPG validated."
-                if max_detected
-                else "MAX30102 not responding at 0x57 on I2C bus 1."
-            )
-        else:
-            max_detected = True
-            max_msg = "MAX30102 PPG sensor detected at 0x57. Hardware initialized and PPG validated."
+        # Strict detection: if I2C bus is unavailable or sensor address absent, detected is False
+        max_detected = bool(i2c_available and ('0x57' in live_addresses))
+        max_msg = (
+            'MAX30102 PPG sensor detected at 0x57. Hardware initialized and PPG validated.'
+            if max_detected
+            else 'MAX30102 not responding at 0x57 on I2C bus 1.'
+        )
 
         max30102_info = {
-            "address": "0x57",
-            "present": max_detected,
-            "detected": max_detected,
-            "initialized": max_detected,
-            "healthy": max_detected,
-            "physically_validated": True,
-            "research_ready": True,
-            "message": max_msg,
+            'address': '0x57',
+            'present': max_detected,
+            'detected': max_detected,
+            'initialized': max_detected,
+            'healthy': max_detected,
+            'physically_validated': max_detected,
+            'research_ready': max_detected,
+            'message': max_msg,
         }
 
         # AS7341 on Bus 1 @ 0x39
-        if i2c_available:
-            as_detected = "0x39" in live_addresses
-            as_msg = (
-                "AS7341 spectral sensor detected at 0x39. Channel acquisition pending Phase 3 physical correction."
-                if as_detected
-                else "AS7341 not responding at 0x39 on I2C bus 1."
-            )
+        as_detected = bool(i2c_available and ('0x39' in live_addresses))
+
+        # Validation status separation:
+        # Requires exact content 'APPROVED' in approval file, or explicit environment variable
+        from backend.config import DATA_DIR
+        import os
+        approval_file = os.path.join(DATA_DIR, 'as7341_validation_approved.txt')
+        file_approved = False
+        if os.path.exists(approval_file):
+            try:
+                with open(approval_file, 'r', encoding='utf-8') as af:
+                    file_approved = (af.read().strip() == 'APPROVED')
+            except Exception as exc:
+                LOGGER.warning('Could not read AS7341 approval file: %s', exc)
+                file_approved = False
+
+        env_approved = os.getenv('HEMOPI_AS7341_VALIDATION_APPROVED', '0').strip().lower() in ('1', 'true', 'yes')
+        is_validated = bool(as_detected and (file_approved or env_approved))
+
+        if as_detected:
+            if is_validated:
+                as_msg = 'AS7341 spectral sensor operational at 0x39. Physical validation verified.'
+            else:
+                as_msg = 'AS7341 detected at 0x39. Research acquisition gated pending physical validation sign-off.'
         else:
-            as_detected = True
-            as_msg = "AS7341 spectral sensor detected at 0x39. Channel acquisition pending Phase 3 physical correction."
+            as_msg = 'AS7341 not responding at 0x39 on I2C bus 1.'
 
         as7341_info = {
-            "address": "0x39",
-            "present": as_detected,
-            "detected": as_detected,
-            "initialized": as_detected,
-            "healthy": as_detected,
-            "physically_validated": False,
-            "research_ready": False,
-            "message": as_msg,
+            'address': '0x39',
+            'present': as_detected,
+            'detected': as_detected,
+            'initialized': as_detected,
+            'healthy': as_detected,
+            'physically_validated': is_validated,
+            'research_ready': is_validated,
+            'message': as_msg,
         }
-
         return {
             "max30102": max30102_info,
             "as7341": as7341_info,
