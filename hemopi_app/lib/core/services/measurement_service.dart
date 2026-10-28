@@ -30,21 +30,52 @@ class HttpMeasurementService implements MeasurementService {
     final res = await apiClient.post('/api/sessions', {
       'patient_id': patientId,
     });
+    final statusStr = (res['status'] ?? '').toString().toUpperCase();
+    final isCompleted = statusStr == 'COMPLETED';
+
     return MeasurementSession(
       sessionId: res['session_id'],
       patientId: res['patient_id'],
       createdAt: DateTime.parse(res['timestamp']),
-      status: SessionStatus.created,
-      sensorReadinessState: 'GATED_PENDING_PHASE_3_4',
+      completedAt: isCompleted ? DateTime.now() : null,
+      status: isCompleted ? SessionStatus.completed : SessionStatus.failed,
+      sensorReadinessState: 'OPERATIONAL',
       attemptedSamples: res['sample_count'] ?? 0,
       validSamples: res['valid_count'] ?? 0,
       rejectedSamples: res['rejected_count'] ?? 0,
-      validationStatus: 'ACQUISITION_NOT_READY',
+      validationStatus: isCompleted ? 'PASSED' : 'REJECTED',
+      reportAvailable: isCompleted,
+      localValidCsvFile: res['local_csv'],
+      localSummaryFile: res['diagnostic_file'],
+      errorMessage: res['message'],
     );
   }
 
   @override
   Future<MeasurementSession> stopSession(String sessionId) async {
-    throw UnimplementedError('Real acquisition deferred to Phase 4');
+    // Single-shot acquisition completes synchronously during startSession.
+    // Fetch latest persisted session state from backend.
+    final res = await apiClient.get('/api/sessions/$sessionId');
+    if (res != null) {
+      final statusStr = (res['status'] ?? '').toString().toUpperCase();
+      final isCompleted = statusStr == 'COMPLETED';
+      return MeasurementSession(
+        sessionId: res['session_id'],
+        patientId: res['patient_id'],
+        createdAt: DateTime.parse(res['timestamp']),
+        completedAt: isCompleted ? DateTime.now() : null,
+        status: isCompleted ? SessionStatus.completed : SessionStatus.failed,
+        sensorReadinessState: 'OPERATIONAL',
+        attemptedSamples: res['sample_count'] ?? 0,
+        validSamples: res['valid_count'] ?? 0,
+        rejectedSamples: res['rejected_count'] ?? 0,
+        validationStatus: isCompleted ? 'PASSED' : 'REJECTED',
+        reportAvailable: isCompleted,
+        localValidCsvFile: res['local_csv'],
+        localSummaryFile: res['diagnostic_file'],
+        errorMessage: res['message'],
+      );
+    }
+    throw Exception('Session $sessionId not found.');
   }
 }

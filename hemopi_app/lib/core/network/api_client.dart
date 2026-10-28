@@ -78,7 +78,7 @@ class ApiClient {
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(body),
           )
-          .timeout(const Duration(seconds: 8));
+          .timeout(const Duration(seconds: 45));
       return _handleResponse(response);
     } on TimeoutException {
       throw const ApiException(

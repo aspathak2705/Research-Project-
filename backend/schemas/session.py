@@ -13,6 +13,8 @@ class SessionResponse(BaseModel):
     valid_count: int
     rejected_count: int
     message: Optional[str] = None
+    local_csv: Optional[str] = None
+    diagnostic_file: Optional[str] = None
 
 class SessionListResponse(BaseModel):
     status: str
