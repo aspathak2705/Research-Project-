@@ -140,19 +140,22 @@ class DeviceController:
 
             self._transition(DeviceState.READY)
 
-            if not session_result.passed:
-                raise SignalQualityError(
-                    f"Session failed quality validation ({session_result.valid_samples}/{session_result.attempted_samples} valid samples). "
-                    f"Reasons: {'; '.join(session_result.reasons)}"
-                )
-
-            return AcquisitionResult(
+            acq_res = AcquisitionResult(
                 patient_name=normalized_name,
                 session_file=valid_csv_file,
                 diagnostic_file=diag_file,
                 rejected_file=rejected_file,
                 session_result=session_result,
             )
+
+            if not session_result.passed:
+                raise SignalQualityError(
+                    f"Session failed quality validation ({session_result.valid_samples}/{session_result.attempted_samples} valid samples). "
+                    f"Reasons: {'; '.join(session_result.reasons)}",
+                    acquisition_result=acq_res,
+                )
+
+            return acq_res
         finally:
             # Always ensure sensors are closed / reset safely on exit or error
             try:

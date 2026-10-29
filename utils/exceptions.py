@@ -7,6 +7,10 @@ class HardwareError(HemoAnalyzerError):
 
 
 class SignalQualityError(HemoAnalyzerError):
+    def __init__(self, message: str, acquisition_result=None):
+        super().__init__(message)
+        self.acquisition_result = acquisition_result
+
     """Raised when captured data fails quality checks."""
 
 

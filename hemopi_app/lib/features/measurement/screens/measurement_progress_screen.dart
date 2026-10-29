@@ -115,7 +115,7 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
       });
     } catch (e) {
       if (mounted) {
-        String friendlyError = 'Measurement is not available yet because required sensor validation is still pending on the instrument.';
+        String friendlyError = 'Measurement acquisition could not be completed. Please ensure finger is firmly placed on sensor.';
         final errStr = e.toString().toLowerCase();
         if (errStr.contains('timeout')) {
           friendlyError = 'HemoPi did not respond in time. Please verify that the instrument is switched on.';

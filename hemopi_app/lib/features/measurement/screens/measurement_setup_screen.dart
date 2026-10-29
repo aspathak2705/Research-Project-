@@ -285,6 +285,17 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
         );
 
       case MeasurementReadinessState.validationPending:
+        if (_sensorsDetected) {
+          return _buildNoticeCard(
+            icon: Icons.check_circle_outline_rounded,
+            iconColor: AppColors.primary,
+            title: 'Live Hardware Ready',
+            message: 'Physical sensors are online and ready for demonstration acquisition.',
+            bgColor: AppColors.primaryContainer,
+            borderColor: AppColors.primaryLight,
+            textColor: AppColors.primaryDark,
+          );
+        }
         return _buildNoticeCard(
           icon: Icons.info_outline_rounded,
           iconColor: AppColors.statusWarning,

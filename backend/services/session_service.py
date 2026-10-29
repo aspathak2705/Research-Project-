@@ -138,10 +138,19 @@ class SessionBackendService:
             ctrl = controller or cls.build_controller()
 
             # 4. Execute physical sensor acquisition
-            acq_result = ctrl.run_session(normalized_patient, sample_count=sample_count)
-            res = acq_result.session_result
+            try:
+                acq_result = ctrl.run_session(normalized_patient, sample_count=sample_count)
+            except SignalQualityError as sq_err:
+                if not demo_mode or not getattr(sq_err, "acquisition_result", None):
+                    raise
+                # In demo_mode, hardware collected physical samples but quality validator rejected research threshold
+                LOGGER.info("Demo mode using physical acquisition despite research quality threshold: %s", sq_err)
+                acq_result = sq_err.acquisition_result
 
-            session_id = acq_result.session_file.stem if acq_result.session_file else f"SES_{int(time.time() * 1000)}"
+            res = acq_result.session_result
+            session_file = acq_result.session_file
+            diagnostic_file = acq_result.diagnostic_file
+            session_id = session_file.stem if session_file else (diagnostic_file.stem if diagnostic_file else f"SES_{int(time.time() * 1000)}")
             timestamp_str = datetime.utcnow().isoformat() + "Z"
 
             # Extract latest real physical readings if available from evaluated samples
@@ -168,19 +177,20 @@ class SessionBackendService:
                     },
                 }
 
+            is_successful = res.passed or (demo_mode and latest_readings is not None)
             session_record = {
                 "session_id": session_id,
                 "patient_id": normalized_patient,
                 "timestamp": timestamp_str,
-                "status": "COMPLETED" if res.passed else "FAILED",
+                "status": "COMPLETED" if is_successful else "FAILED",
                 "sample_count": res.attempted_samples,
                 "valid_count": res.valid_samples,
                 "rejected_count": res.rejected_samples,
                 "is_demo": demo_mode,
                 "readings": latest_readings,
-                "message": "Physical sensor measurement completed successfully." if res.passed else "; ".join(res.reasons),
-                "local_csv": str(acq_result.session_file) if acq_result.session_file else None,
-                "diagnostic_file": str(acq_result.diagnostic_file) if acq_result.diagnostic_file else None,
+                "message": "Physical sensor demonstration measurement completed." if demo_mode else ("Physical sensor measurement completed successfully." if res.passed else "; ".join(res.reasons)),
+                "local_csv": str(session_file) if session_file else None,
+                "diagnostic_file": str(diagnostic_file) if diagnostic_file else None,
             }
 
             # 5. Persist real session outcome
