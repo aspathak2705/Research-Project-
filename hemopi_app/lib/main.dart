@@ -18,7 +18,7 @@ void main() {
   final wifiService = HttpWifiService(client: apiClient);
   final patientService = AndroidLocalPatientService();
   final measurementService = HttpMeasurementService(client: apiClient);
-  final sessionService = AndroidLocalSessionService();
+  final sessionService = AndroidLocalSessionService(apiClient: apiClient);
   final diagnosticsService = HttpDiagnosticsService(client: apiClient);
   final reportService = AndroidLocalReportService();
 

@@ -21,7 +21,7 @@ class LocalDatabaseService {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -38,6 +38,14 @@ class LocalDatabaseService {
           is_active INTEGER NOT NULL
         )
       ''');
+    }
+    if (oldVersion < 3) {
+      try {
+        await db.execute('ALTER TABLE measurement_sessions ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE measurement_sessions ADD COLUMN readings TEXT');
+      } catch (_) {}
     }
   }
 
@@ -82,6 +90,8 @@ class LocalDatabaseService {
         local_summary_file TEXT,
         error_code TEXT,
         error_message TEXT,
+        is_demo INTEGER NOT NULL DEFAULT 0,
+        readings TEXT,
         FOREIGN KEY (patient_id) REFERENCES patients (patient_id)
       )
     ''');

@@ -58,6 +58,71 @@ class SessionDetailsScreen extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.md),
 
+            if (session.readings != null) ...[
+              CustomCard(
+                title: 'Sensor Acquisition Readings',
+                subtitle: session.isDemo ? 'Live Demonstration Capture' : 'Authentic Physical Readings',
+                trailing: StatusBadge(
+                  label: session.isDemo ? 'Demo Mode' : 'Authentic',
+                  type: BadgeType.ready,
+                ),
+                child: Column(
+                  children: [
+                    ClinicalDetailRow(
+                      label: 'MAX30102 Red',
+                      value: '${session.readings!['max30102_red']} ADC counts',
+                    ),
+                    const Divider(),
+                    ClinicalDetailRow(
+                      label: 'MAX30102 Infrared',
+                      value: '${session.readings!['max30102_ir']} ADC counts',
+                    ),
+                    const Divider(),
+                    ClinicalDetailRow(
+                      label: 'AS7341 415 nm (Violet)',
+                      value: '${session.readings!['as7341_415nm']} counts',
+                    ),
+                    const Divider(),
+                    ClinicalDetailRow(
+                      label: 'AS7341 445 nm (Indigo)',
+                      value: '${session.readings!['as7341_445nm']} counts',
+                    ),
+                    const Divider(),
+                    ClinicalDetailRow(
+                      label: 'AS7341 480 nm (Blue)',
+                      value: '${session.readings!['as7341_480nm']} counts',
+                    ),
+                    const Divider(),
+                    ClinicalDetailRow(
+                      label: 'AS7341 515 nm (Cyan)',
+                      value: '${session.readings!['as7341_515nm']} counts',
+                    ),
+                    const Divider(),
+                    ClinicalDetailRow(
+                      label: 'AS7341 555 nm (Green)',
+                      value: '${session.readings!['as7341_555nm']} counts',
+                    ),
+                    const Divider(),
+                    ClinicalDetailRow(
+                      label: 'AS7341 590 nm (Yellow)',
+                      value: '${session.readings!['as7341_590nm']} counts',
+                    ),
+                    const Divider(),
+                    ClinicalDetailRow(
+                      label: 'AS7341 630 nm (Orange)',
+                      value: '${session.readings!['as7341_630nm']} counts',
+                    ),
+                    const Divider(),
+                    ClinicalDetailRow(
+                      label: 'AS7341 680 nm (Red)',
+                      value: '${session.readings!['as7341_680nm']} counts',
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+            ],
+
             const ClinicalNoticeBanner(
               title: 'Investigational Record',
               message:

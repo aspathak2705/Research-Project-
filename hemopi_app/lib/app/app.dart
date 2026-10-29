@@ -122,6 +122,8 @@ class HemoPiApp extends StatelessWidget {
                 patient: patient,
                 demoMode: demoMode,
                 measurementService: measurementService,
+                sessionService: sessionService,
+                reportService: reportService,
               ),
             );
           case AppRoutes.sessionResult:

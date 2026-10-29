@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../core/models/patient.dart';
 import '../../../core/models/measurement_session.dart';
 import '../../../core/services/measurement_service.dart';
+import '../../../core/services/session_service.dart';
+import '../../../core/services/report_service.dart';
 import '../../../shared/widgets/custom_card.dart';
 import '../../../shared/widgets/status_badge.dart';
 import '../../../shared/widgets/clinical_scaffold.dart';
@@ -15,12 +17,16 @@ class MeasurementProgressScreen extends StatefulWidget {
   final Patient? patient;
   final bool demoMode;
   final MeasurementService measurementService;
+  final SessionService? sessionService;
+  final ReportService? reportService;
 
   const MeasurementProgressScreen({
     super.key,
     this.patient,
     this.demoMode = false,
     required this.measurementService,
+    this.sessionService,
+    this.reportService,
   });
 
   @override
@@ -87,6 +93,15 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
           timer.cancel();
           try {
             final finishedSession = await widget.measurementService.stopSession(session.sessionId);
+            if (widget.sessionService != null) {
+              await widget.sessionService!.saveSession(finishedSession);
+            }
+            if (widget.reportService != null && widget.patient != null) {
+              await widget.reportService!.generateReportForSession(
+                session: finishedSession,
+                patient: widget.patient!,
+              );
+            }
             if (mounted) {
               setState(() {
                 _isAcquiring = false;

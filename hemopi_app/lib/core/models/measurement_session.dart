@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 enum SessionStatus {
   created,
   waitingForDevice,
@@ -71,10 +73,23 @@ class MeasurementSession {
       'error_code': errorCode,
       'error_message': errorMessage,
       'is_demo': isDemo ? 1 : 0,
+      'readings': readings != null ? jsonEncode(readings) : null,
     };
   }
 
   factory MeasurementSession.fromMap(Map<String, dynamic> map) {
+    Map<String, dynamic>? parsedReadings;
+    if (map['readings'] is Map<String, dynamic>) {
+      parsedReadings = map['readings'];
+    } else if (map['readings'] is String && (map['readings'] as String).isNotEmpty) {
+      try {
+        final decoded = jsonDecode(map['readings']);
+        if (decoded is Map<String, dynamic>) {
+          parsedReadings = decoded;
+        }
+      } catch (_) {}
+    }
+
     return MeasurementSession(
       sessionId: map['session_id'],
       patientId: map['patient_id'],
@@ -96,7 +111,7 @@ class MeasurementSession {
       errorCode: map['error_code'],
       errorMessage: map['error_message'],
       isDemo: map['is_demo'] == 1 || map['is_demo'] == true,
-      readings: map['readings'] is Map<String, dynamic> ? map['readings'] : null,
+      readings: parsedReadings,
     );
   }
 }
