@@ -116,9 +116,11 @@ class HemoPiApp extends StatelessWidget {
           case AppRoutes.measurementProgress:
             final args = settings.arguments as Map<String, dynamic>?;
             final patient = args?['patient'] as Patient?;
+            final demoMode = args?['demo_mode'] as bool? ?? false;
             return MaterialPageRoute(
               builder: (_) => MeasurementProgressScreen(
                 patient: patient,
+                demoMode: demoMode,
                 measurementService: measurementService,
               ),
             );

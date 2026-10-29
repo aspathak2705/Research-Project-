@@ -36,6 +36,7 @@ class MeasurementSetupScreen extends StatefulWidget {
 
 class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
   MeasurementReadinessState _readinessState = MeasurementReadinessState.checking;
+  bool _sensorsDetected = false;
 
   @override
   void initState() {
@@ -46,44 +47,53 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
   Future<void> _checkHardwarePreflight() async {
     setState(() {
       _readinessState = MeasurementReadinessState.checking;
+      _sensorsDetected = false;
     });
 
     try {
       final status = await widget.deviceService.getSensorStatus();
       if (!mounted) return;
 
-      final ready = status.max30102Present &&
-          status.as7341Present &&
+      final bothDetected = status.max30102Present && status.as7341Present;
+      final ready = bothDetected &&
           status.as7341ResearchReady &&
           status.as7341PhysicallyValidated;
 
       if (!status.max30102Present || !status.as7341Present) {
         setState(() {
           _readinessState = MeasurementReadinessState.sensorMissing;
+          _sensorsDetected = false;
         });
       } else if (!status.as7341ResearchReady || !status.as7341PhysicallyValidated) {
         setState(() {
           _readinessState = MeasurementReadinessState.validationPending;
+          _sensorsDetected = true;
         });
       } else if (ready) {
         setState(() {
           _readinessState = MeasurementReadinessState.ready;
+          _sensorsDetected = true;
         });
       } else {
         setState(() {
           _readinessState = MeasurementReadinessState.validationPending;
+          _sensorsDetected = bothDetected;
         });
       }
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _readinessState = MeasurementReadinessState.disconnected;
+        _sensorsDetected = false;
       });
     }
   }
 
   bool get _isReadyForAcquisition =>
       _readinessState == MeasurementReadinessState.ready && widget.patient != null;
+
+  bool get _canStartDemoMeasurement =>
+      _sensorsDetected && widget.patient != null;
 
   @override
   Widget build(BuildContext context) {
@@ -170,27 +180,61 @@ class _MeasurementSetupScreenState extends State<MeasurementSetupScreen> {
             const SizedBox(height: AppSpacing.lg),
 
             // Section D: Primary Action
-            ElevatedButton.icon(
-              icon: const Icon(Icons.play_arrow_rounded, size: 22),
-              label: const Text('Start Measurement'),
-              onPressed: _isReadyForAcquisition
-                  ? () {
-                      Navigator.pushNamed(
-                        context,
-                        AppRoutes.measurementProgress,
-                        arguments: {
-                          'patient': widget.patient,
-                        },
-                      );
-                    }
-                  : null,
-            ),
-            if (!_isReadyForAcquisition) ...[
+            if (_isReadyForAcquisition)
+              ElevatedButton.icon(
+                icon: const Icon(Icons.play_arrow_rounded, size: 22),
+                label: const Text('Start Measurement'),
+                onPressed: () {
+                  Navigator.pushNamed(
+                    context,
+                    AppRoutes.measurementProgress,
+                    arguments: {
+                      'patient': widget.patient,
+                      'demo_mode': false,
+                    },
+                  );
+                },
+              )
+            else if (_canStartDemoMeasurement)
+              ElevatedButton.icon(
+                icon: const Icon(Icons.play_arrow_rounded, size: 22),
+                label: const Text('Start Demo Measurement'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () {
+                  Navigator.pushNamed(
+                    context,
+                    AppRoutes.measurementProgress,
+                    arguments: {
+                      'patient': widget.patient,
+                      'demo_mode': true,
+                    },
+                  );
+                },
+              )
+            else
+              ElevatedButton.icon(
+                icon: const Icon(Icons.play_arrow_rounded, size: 22),
+                label: const Text('Start Measurement'),
+                onPressed: null,
+              ),
+            if (!_isReadyForAcquisition && !_canStartDemoMeasurement) ...[
               const SizedBox(height: AppSpacing.xs),
               Center(
                 child: Text(
                   _getDisabledActionHint(),
                   style: const TextStyle(fontSize: 12, color: AppColors.textDisabled),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ] else if (!_isReadyForAcquisition && _canStartDemoMeasurement) ...[
+              const SizedBox(height: AppSpacing.xs),
+              const Center(
+                child: Text(
+                  'Physical sensors detected. Live raw acquisition available for demonstration.',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                   textAlign: TextAlign.center,
                 ),
               ),

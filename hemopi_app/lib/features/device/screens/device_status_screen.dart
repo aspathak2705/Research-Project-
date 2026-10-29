@@ -117,23 +117,9 @@ class _DeviceStatusScreenState extends State<DeviceStatusScreen> {
                               value: _isAcquisitionApproved
                                   ? 'Ready for measurement'
                                   : 'Validation pending',
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    _isAcquisitionApproved ? 'Ready for measurement' : 'Validation pending',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  ),
-                                  const SizedBox(width: AppSpacing.xs),
-                                  StatusBadge(
-                                    label: _isAcquisitionApproved ? 'Ready' : 'Pending',
-                                    type: _isAcquisitionApproved ? BadgeType.ready : BadgeType.warning,
-                                  ),
-                                ],
+                              trailing: StatusBadge(
+                                label: _isAcquisitionApproved ? 'Ready' : 'Validation pending',
+                                type: _isAcquisitionApproved ? BadgeType.ready : BadgeType.warning,
                               ),
                             ),
                           ],

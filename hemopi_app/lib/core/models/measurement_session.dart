@@ -28,6 +28,8 @@ class MeasurementSession {
   final String? localSummaryFile;
   final String? errorCode;
   final String? errorMessage;
+  final bool isDemo;
+  final Map<String, dynamic>? readings;
 
   const MeasurementSession({
     required this.sessionId,
@@ -46,6 +48,8 @@ class MeasurementSession {
     this.localSummaryFile,
     this.errorCode,
     this.errorMessage,
+    this.isDemo = false,
+    this.readings,
   });
 
   Map<String, dynamic> toMap() {
@@ -66,6 +70,7 @@ class MeasurementSession {
       'local_summary_file': localSummaryFile,
       'error_code': errorCode,
       'error_message': errorMessage,
+      'is_demo': isDemo ? 1 : 0,
     };
   }
 
@@ -90,6 +95,8 @@ class MeasurementSession {
       localSummaryFile: map['local_summary_file'],
       errorCode: map['error_code'],
       errorMessage: map['error_message'],
+      isDemo: map['is_demo'] == 1 || map['is_demo'] == true,
+      readings: map['readings'] is Map<String, dynamic> ? map['readings'] : null,
     );
   }
 }

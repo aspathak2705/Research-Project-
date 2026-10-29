@@ -98,11 +98,13 @@ class SessionBackendService:
         cls,
         patient_id: str,
         sample_count: int = 24,
+        demo_mode: bool = False,
         controller: Optional[DeviceController] = None,
     ) -> Tuple[Optional[dict], Optional[str]]:
         """
         Executes real physical acquisition for the given patient.
-        Respects AS7341 research readiness gate.
+        Respects AS7341 research readiness gate in normal mode.
+        In demo_mode, allows raw sensor acquisition if physical sensors are detected.
         Prevents concurrent acquisitions via thread lock.
         Persists completed session record into data/sessions.json.
         """
@@ -111,11 +113,20 @@ class SessionBackendService:
 
         normalized_patient = patient_id.strip()
 
-        # 1. Check AS7341 research readiness gate
+        # 1. Check sensor presence / research readiness gate
         sensors = DeviceBackendService.get_sensor_health_info()
-        as_ready = sensors.get("as7341", {}).get("research_ready", False)
-        if not as_ready:
-            return None, "ACQUISITION_NOT_READY: AS7341 multispectral channel validation is pending. Acquisition is safely gated."
+        as_info = sensors.get("as7341", {})
+        max_info = sensors.get("max30102", {})
+
+        if demo_mode:
+            # Demonstration acquisition requires physical sensors detected
+            if not as_info.get("present", False) or not max_info.get("present", False):
+                return None, "SENSORS_NOT_DETECTED: Both MAX30102 and AS7341 sensors must be detected on I2C bus for demonstration acquisition."
+        else:
+            # Standard research mode requires strict research readiness sign-off
+            as_ready = as_info.get("research_ready", False)
+            if not as_ready:
+                return None, "ACQUISITION_NOT_READY: AS7341 multispectral channel validation is pending. Acquisition is safely gated."
 
         # 2. Acquire acquisition lock
         if not cls._lock.acquire(blocking=False):
@@ -133,6 +144,30 @@ class SessionBackendService:
             session_id = acq_result.session_file.stem if acq_result.session_file else f"SES_{int(time.time() * 1000)}"
             timestamp_str = datetime.utcnow().isoformat() + "Z"
 
+            # Extract latest real physical readings if available from evaluated samples
+            latest_readings = None
+            if res.evaluated_samples:
+                # Prefer latest valid sample, else fallback to latest evaluated sample
+                valid_samples = [item.sample for item in res.evaluated_samples if item.valid]
+                target_sample = valid_samples[-1] if valid_samples else res.evaluated_samples[-1].sample
+                latest_readings = {
+                    "timestamp": target_sample.timestamp,
+                    "max30102_red": target_sample.MAX30102_RED,
+                    "max30102_ir": target_sample.MAX30102_IR,
+                    "as7341_415nm": target_sample.AS7341_415nm,
+                    "as7341_445nm": target_sample.AS7341_445nm,
+                    "as7341_480nm": target_sample.AS7341_480nm,
+                    "as7341_515nm": target_sample.AS7341_515nm,
+                    "as7341_555nm": target_sample.AS7341_555nm,
+                    "as7341_590nm": target_sample.AS7341_590nm,
+                    "as7341_630nm": target_sample.AS7341_630nm,
+                    "as7341_680nm": target_sample.AS7341_680nm,
+                    "units": {
+                        "max30102": "ADC counts",
+                        "as7341": "raw counts",
+                    },
+                }
+
             session_record = {
                 "session_id": session_id,
                 "patient_id": normalized_patient,
@@ -141,6 +176,8 @@ class SessionBackendService:
                 "sample_count": res.attempted_samples,
                 "valid_count": res.valid_samples,
                 "rejected_count": res.rejected_samples,
+                "is_demo": demo_mode,
+                "readings": latest_readings,
                 "message": "Physical sensor measurement completed successfully." if res.passed else "; ".join(res.reasons),
                 "local_csv": str(acq_result.session_file) if acq_result.session_file else None,
                 "diagnostic_file": str(acq_result.diagnostic_file) if acq_result.diagnostic_file else None,

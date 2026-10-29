@@ -3,7 +3,7 @@ import '../network/api_client.dart';
 
 abstract class MeasurementService {
   Future<bool> checkHardwareReadiness();
-  Future<MeasurementSession> startSession({required String patientId});
+  Future<MeasurementSession> startSession({required String patientId, bool demoMode = false});
   Future<MeasurementSession> stopSession(String sessionId);
 }
 
@@ -26,9 +26,10 @@ class HttpMeasurementService implements MeasurementService {
   }
 
   @override
-  Future<MeasurementSession> startSession({required String patientId}) async {
+  Future<MeasurementSession> startSession({required String patientId, bool demoMode = false}) async {
     final res = await apiClient.post('/api/sessions', {
       'patient_id': patientId,
+      'demo_mode': demoMode,
     });
     final statusStr = (res['status'] ?? '').toString().toUpperCase();
     final isCompleted = statusStr == 'COMPLETED';
@@ -39,7 +40,7 @@ class HttpMeasurementService implements MeasurementService {
       createdAt: DateTime.parse(res['timestamp']),
       completedAt: isCompleted ? DateTime.now() : null,
       status: isCompleted ? SessionStatus.completed : SessionStatus.failed,
-      sensorReadinessState: 'OPERATIONAL',
+      sensorReadinessState: res['is_demo'] == true ? 'DEMO_ACQUISITION' : 'OPERATIONAL',
       attemptedSamples: res['sample_count'] ?? 0,
       validSamples: res['valid_count'] ?? 0,
       rejectedSamples: res['rejected_count'] ?? 0,
@@ -48,6 +49,8 @@ class HttpMeasurementService implements MeasurementService {
       localValidCsvFile: res['local_csv'],
       localSummaryFile: res['diagnostic_file'],
       errorMessage: res['message'],
+      isDemo: res['is_demo'] == true,
+      readings: res['readings'] is Map<String, dynamic> ? res['readings'] : null,
     );
   }
 
@@ -65,7 +68,7 @@ class HttpMeasurementService implements MeasurementService {
         createdAt: DateTime.parse(res['timestamp']),
         completedAt: isCompleted ? DateTime.now() : null,
         status: isCompleted ? SessionStatus.completed : SessionStatus.failed,
-        sensorReadinessState: 'OPERATIONAL',
+        sensorReadinessState: res['is_demo'] == true ? 'DEMO_ACQUISITION' : 'OPERATIONAL',
         attemptedSamples: res['sample_count'] ?? 0,
         validSamples: res['valid_count'] ?? 0,
         rejectedSamples: res['rejected_count'] ?? 0,
@@ -74,6 +77,8 @@ class HttpMeasurementService implements MeasurementService {
         localValidCsvFile: res['local_csv'],
         localSummaryFile: res['diagnostic_file'],
         errorMessage: res['message'],
+        isDemo: res['is_demo'] == true,
+        readings: res['readings'] is Map<String, dynamic> ? res['readings'] : null,
       );
     }
     throw Exception('Session $sessionId not found.');

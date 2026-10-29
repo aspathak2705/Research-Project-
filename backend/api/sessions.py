@@ -14,7 +14,10 @@ def list_sessions():
 
 @router.post("", response_model=SessionResponse)
 def create_session(req: SessionCreateRequest):
-    session, error_msg = SessionBackendService.create_session(req.patient_id)
+    session, error_msg = SessionBackendService.create_session(
+        patient_id=req.patient_id,
+        demo_mode=req.demo_mode,
+    )
     if error_msg:
         raise HTTPException(status_code=409, detail=error_msg)
     return session

@@ -13,11 +13,13 @@ import '../../../app/routes.dart';
 
 class MeasurementProgressScreen extends StatefulWidget {
   final Patient? patient;
+  final bool demoMode;
   final MeasurementService measurementService;
 
   const MeasurementProgressScreen({
     super.key,
     this.patient,
+    this.demoMode = false,
     required this.measurementService,
   });
 
@@ -74,7 +76,10 @@ class _MeasurementProgressScreenState extends State<MeasurementProgressScreen> {
 
     try {
       final patientId = widget.patient?.patientId ?? 'ANONYMOUS';
-      final session = await widget.measurementService.startSession(patientId: patientId);
+      final session = await widget.measurementService.startSession(
+        patientId: patientId,
+        demoMode: widget.demoMode,
+      );
 
       _timer = Timer.periodic(const Duration(milliseconds: 500), (timer) async {
         final currentProgress = _progress + 0.1;
